@@ -1,470 +1,571 @@
---[[ VV Ultimatum - Ultra Otimizado v4.0 ]]
-local Services = {
-    Players = game:GetService("Players"),
-    RunService = game:GetService("RunService"),
-    UserInputService = game:GetService("UserInputService"),
-    TweenService = game:GetService("TweenService"),
-    ReplicatedStorage = game:GetService("ReplicatedStorage"),
-    Workspace = game:GetService("Workspace")
+--[[
+    Advanced Movement GUI - Roblox Script
+    Features: Noclip, Speed Hack, Modern UI
+    Author: System Generated
+]]
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+-- Player Variables
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- Script Settings
+local Settings = {
+    Noclip = false,
+    SpeedBoost = false,
+    SpeedValue = 16,
+    DefaultSpeed = 16,
+    Minimized = false,
+    Dragging = false,
+    DragStart = nil,
+    StartPos = nil
 }
 
-local Player = Services.Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
+-- Connection Variables
+local Connections = {}
+local NoclipConnection = nil
+local SpeedConnection = nil
 
--- Configurações simplificadas
-local Config = {
-    AutoParry = false,
-    HitboxESP = false,
-    AutoFarm = false,
-    AutoAttack = false,
-    TargetBoss = nil,
-    Position = "Frente",
-    SafeDistance = 20, -- Distância segura do boss
-    AttackDistance = 15, -- Distância para atacar
-    LastUpdate = 0,
-    Hitboxes = {}
-}
+-- UI Creation
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MovementGUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Função super otimizada para encontrar mobs/bosses
-local function FindTargets(nameFilter)
-    local targets = {}
-    for _, obj in ipairs(Services.Workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
-            local hum = obj.Humanoid
-            if hum.Health > 0 and not Services.Players:GetPlayerFromCharacter(obj) then
-                local n = obj.Name:lower()
-                if nameFilter == "mobs" then
-                    if n:find("hollow") or n:find("menos") or n:find("arrancar") or n:find("vasto") or n:find("mob") then
-                        table.insert(targets, obj)
-                    end
-                elseif nameFilter == "boss" then
-                    if (n:find("giant") and n:find("dragonfly")) or n:find("boss") or obj:GetAttribute("IsBoss") then
-                        table.insert(targets, {Model = obj, Humanoid = hum, RootPart = obj.HumanoidRootPart, Name = obj.Name, Health = hum.Health, MaxHealth = hum.MaxHealth})
-                    end
-                end
-            end
-        end
-    end
-    return targets
-end
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainFrame.BackgroundTransparency = 0.05
+MainFrame.BorderSizePixel = 0
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -150)
+MainFrame.Size = UDim2.new(0, 300, 0, 350)
+MainFrame.ClipsDescendants = true
 
--- Auto Parry otimizado
-local function AutoParry()
-    if not Config.AutoParry then return end
-    local char = Player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
-    local now = tick()
-    if now - Config.LastUpdate < 0.2 then return end
-    Config.LastUpdate = now
-    
-    local charPos = char.HumanoidRootPart.Position
-    local mobs = FindTargets("mobs")
-    
-    for _, mob in ipairs(mobs) do
-        local root = mob:FindFirstChild("HumanoidRootPart")
-        if root and (root.Position - charPos).Magnitude < 20 then
-            local anim = mob:FindFirstChild("Humanoid"):FindFirstChild("Animator")
-            if anim then
-                for _, track in ipairs(anim:GetPlayingAnimationTracks()) do
-                    if track.Animation.AnimationId:lower():find("attack") then
-                        pcall(function()
-                            local r = Services.ReplicatedStorage:FindFirstChild("Remotes")
-                            if r then
-                                local c = r:FindFirstChild("Combat") or r:FindFirstChild("Parry")
-                                if c then c:FireServer("Parry") end
-                            end
-                        end)
-                        return
-                    end
-                end
-            end
-        end
-    end
-end
+-- Round corners
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 12)
+UICorner.Parent = MainFrame
 
--- Hitbox ESP otimizado (apenas cria, não fica recriando)
-local function UpdateESP()
-    if not Config.HitboxESP then
-        for _, hb in ipairs(Config.Hitboxes) do
-            if hb and hb.Parent then hb:Destroy() end
-        end
-        Config.Hitboxes = {}
-        return
-    end
-    
-    local mobs = FindTargets("mobs")
-    
-    -- Remover hitboxes de mobs mortos
-    for i = #Config.Hitboxes, 1, -1 do
-        local hb = Config.Hitboxes[i]
-        if hb and hb.Parent then
-            local found = false
-            for _, mob in ipairs(mobs) do
-                if mob == hb.Parent then found = true; break end
-            end
-            if not found then
-                hb:Destroy()
-                table.remove(Config.Hitboxes, i)
-            end
-        else
-            table.remove(Config.Hitboxes, i)
-        end
-    end
-    
-    -- Criar/atualizar hitboxes
-    for _, mob in ipairs(mobs) do
-        local hb = mob:FindFirstChild("ESPHitbox")
-        if not hb then
-            hb = Instance.new("Part")
-            hb.Name = "ESPHitbox"
-            hb.Size = Vector3.new(4, 5, 4)
-            hb.Color = Color3.fromRGB(255, 50, 50)
-            hb.Transparency = 0.5
-            hb.Material = Enum.Material.Neon
-            hb.Anchored = true
-            hb.CanCollide = false
-            hb.CanQuery = false
-            hb.Parent = mob
-            table.insert(Config.Hitboxes, hb)
-        end
-        local root = mob:FindFirstChild("HumanoidRootPart")
-        if root then hb.Position = root.Position end
-    end
-end
+-- Shadow effect
+local Shadow = Instance.new("ImageLabel")
+Shadow.Name = "Shadow"
+Shadow.Parent = MainFrame
+Shadow.BackgroundTransparency = 1
+Shadow.Position = UDim2.new(0, -5, 0, -5)
+Shadow.Size = UDim2.new(1, 10, 1, 10)
+Shadow.Image = "rbxassetid://6014261993"
+Shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+Shadow.ImageTransparency = 0.5
+Shadow.ZIndex = -1
 
--- Auto Farm Boss ultra otimizado
-local function AutoFarm()
-    if not Config.AutoFarm or not Config.TargetBoss then return end
-    
-    local char = Player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
-    local boss = Config.TargetBoss
-    local bossRoot = boss.Model:FindFirstChild("HumanoidRootPart")
-    if not bossRoot or boss.Humanoid.Health <= 0 then return end
-    
-    local hrp = char.HumanoidRootPart
-    local bossPos = bossRoot.Position
-    
-    -- Calcular posição segura
-    local offset = Vector3.new(0, 0, 0)
-    local dist = Config.SafeDistance
-    
-    if Config.Position == "Frente" then
-        offset = bossRoot.CFrame.LookVector * dist
-    elseif Config.Position == "Atrás" then
-        offset = -bossRoot.CFrame.LookVector * dist
-    elseif Config.Position == "Acima" then
-        offset = Vector3.new(0, dist, 0)
-    elseif Config.Position == "Abaixo" then
-        offset = Vector3.new(0, -dist, 0)
-    end
-    
-    local targetPos = bossPos + offset
-    
-    -- Teleporte apenas se muito longe
-    if (hrp.Position - targetPos).Magnitude > 5 then
-        hrp.CFrame = CFrame.new(targetPos)
-    end
-    
-    -- Auto ataque
-    if Config.AutoAttack then
-        local distToBoss = (hrp.Position - bossPos).Magnitude
-        if distToBoss <= Config.AttackDistance then
-            pcall(function()
-                local r = Services.ReplicatedStorage:FindFirstChild("Remotes")
-                if r then
-                    local c = r:FindFirstChild("Combat") or r:FindFirstChild("Attack")
-                    if c then c:FireServer("M1") end
-                end
-            end)
-        end
-    end
-end
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Parent = MainFrame
+TitleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+TitleBar.BorderSizePixel = 0
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
 
--- =========== INTERFACE SUPER SIMPLES ===========
-local SG = Instance.new("ScreenGui")
-SG.Name = "VVUI"
-SG.Parent = PlayerGui
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 12)
+TitleCorner.Parent = TitleBar
 
-local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 480)
-Main.Position = UDim2.new(0.5, -190, 0.2, 0)
-Main.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-Main.BorderSizePixel = 0
-Main.Parent = SG
-
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
-
--- Título
-local Title = Instance.new("Frame")
-Title.Size = UDim2.new(1, 0, 0, 35)
-Title.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
-Title.BorderSizePixel = 0
-Title.Parent = Main
-Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 8)
-
+-- Title Text
 local TitleText = Instance.new("TextLabel")
-TitleText.Size = UDim2.new(1, -40, 1, 0)
-TitleText.Position = UDim2.new(0, 15, 0, 0)
+TitleText.Name = "TitleText"
+TitleText.Parent = TitleBar
 TitleText.BackgroundTransparency = 1
-TitleText.Text = "VV Ultimatum Lite"
-TitleText.TextColor3 = Color3.fromRGB(0, 200, 255)
-TitleText.TextSize = 14
+TitleText.Size = UDim2.new(0.7, 0, 1, 0)
+TitleText.Position = UDim2.new(0, 15, 0, 0)
 TitleText.Font = Enum.Font.GothamBold
+TitleText.Text = "Movement GUI"
+TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleText.TextSize = 18
 TitleText.TextXAlignment = Enum.TextXAlignment.Left
-TitleText.Parent = Title
 
-local Close = Instance.new("TextButton")
-Close.Size = UDim2.new(0, 25, 0, 25)
-Close.Position = UDim2.new(1, -30, 0, 5)
-Close.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-Close.Text = "X"
-Close.TextColor3 = Color3.fromRGB(255, 255, 255)
-Close.TextSize = 14
-Close.Font = Enum.Font.GothamBold
-Close.BorderSizePixel = 0
-Close.Parent = Title
-Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 12)
+-- Minimize Button
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Name = "MinimizeButton"
+MinimizeButton.Parent = TitleBar
+MinimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+MinimizeButton.BorderSizePixel = 0
+MinimizeButton.Position = UDim2.new(0.7, 5, 0.5, -12)
+MinimizeButton.Size = UDim2.new(0, 24, 0, 24)
+MinimizeButton.Text = "—"
+MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeButton.TextSize = 18
+MinimizeButton.Font = Enum.Font.GothamBold
 
--- Scroll
-local Scroll = Instance.new("ScrollingFrame")
-Scroll.Size = UDim2.new(1, -5, 1, -40)
-Scroll.Position = UDim2.new(0, 3, 0, 40)
-Scroll.BackgroundTransparency = 1
-Scroll.BorderSizePixel = 0
-Scroll.ScrollBarThickness = 3
-Scroll.CanvasSize = UDim2.new(0, 0, 0, 800)
-Scroll.Parent = Main
+local MinButtonCorner = Instance.new("UICorner")
+MinButtonCorner.CornerRadius = UDim.new(0, 6)
+MinButtonCorner.Parent = MinimizeButton
 
-local List = Instance.new("UIListLayout")
-List.Padding = UDim.new(0, 5)
-List.Parent = Scroll
+-- Close Button
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Parent = TitleBar
+CloseButton.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+CloseButton.BorderSizePixel = 0
+CloseButton.Position = UDim2.new(0.85, 5, 0.5, -12)
+CloseButton.Size = UDim2.new(0, 24, 0, 24)
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 14
+CloseButton.Font = Enum.Font.GothamBold
 
--- Função para criar toggle simplificado
-local function AddToggle(text, y, callback)
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, -10, 0, 35)
-    Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
-    Frame.BorderSizePixel = 0
-    Frame.Parent = Scroll
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
+local CloseButtonCorner = Instance.new("UICorner")
+CloseButtonCorner.CornerRadius = UDim.new(0, 6)
+CloseButtonCorner.Parent = CloseButton
+
+-- Content Frame
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Parent = MainFrame
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.BorderSizePixel = 0
+ContentFrame.Position = UDim2.new(0, 0, 0, 45)
+ContentFrame.Size = UDim2.new(1, 0, 1, -45)
+
+-- Categories Container
+local CategoriesFrame = Instance.new("Frame")
+CategoriesFrame.Name = "CategoriesFrame"
+CategoriesFrame.Parent = ContentFrame
+CategoriesFrame.BackgroundTransparency = 1
+CategoriesFrame.BorderSizePixel = 0
+CategoriesFrame.Size = UDim2.new(1, -20, 1, -10)
+CategoriesFrame.Position = UDim2.new(0, 10, 0, 5)
+
+-- UIListLayout for scrolling
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = CategoriesFrame
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 10)
+
+-- Function to create category
+local function CreateCategory(name, icon)
+    local Category = Instance.new("Frame")
+    Category.Name = name.."Category"
+    Category.Parent = CategoriesFrame
+    Category.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    Category.BackgroundTransparency = 0.3
+    Category.BorderSizePixel = 0
+    Category.Size = UDim2.new(1, 0, 0, 60)
     
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.6, 0, 1, 0)
-    Label.Position = UDim2.new(0, 10, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = text
-    Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Label.TextSize = 12
-    Label.Font = Enum.Font.Gotham
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Frame
+    local CategoryCorner = Instance.new("UICorner")
+    CategoryCorner.CornerRadius = UDim.new(0, 8)
+    CategoryCorner.Parent = Category
     
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(0, 55, 0, 24)
-    Btn.Position = UDim2.new(1, -60, 0.5, -12)
-    Btn.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
-    Btn.Text = "OFF"
-    Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Btn.TextSize = 11
-    Btn.Font = Enum.Font.GothamBold
-    Btn.BorderSizePixel = 0
-    Btn.AutoButtonColor = false
-    Btn.Parent = Frame
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 12)
+    local CategoryTitle = Instance.new("TextLabel")
+    CategoryTitle.Name = "CategoryTitle"
+    CategoryTitle.Parent = Category
+    CategoryTitle.BackgroundTransparency = 1
+    CategoryTitle.Position = UDim2.new(0, 12, 0, 8)
+    CategoryTitle.Size = UDim2.new(0.8, 0, 0, 20)
+    CategoryTitle.Font = Enum.Font.GothamMedium
+    CategoryTitle.Text = icon.." "..name
+    CategoryTitle.TextColor3 = Color3.fromRGB(200, 200, 200)
+    CategoryTitle.TextSize = 14
+    CategoryTitle.TextXAlignment = Enum.TextXAlignment.Left
     
-    local on = false
-    Btn.MouseButton1Click:Connect(function()
-        on = not on
-        Btn.BackgroundColor3 = on and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(80, 80, 90)
-        Btn.Text = on and "ON" or "OFF"
-        callback(on)
+    return Category
+end
+
+-- Noclip Category
+local NoclipCategory = CreateCategory("Noclip", "🚀")
+NoclipCategory.Size = UDim2.new(1, 0, 0, 70)
+
+local NoclipToggle = Instance.new("TextButton")
+NoclipToggle.Name = "NoclipToggle"
+NoclipToggle.Parent = NoclipCategory
+NoclipToggle.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+NoclipToggle.BorderSizePixel = 0
+NoclipToggle.Position = UDim2.new(0, 12, 0, 35)
+NoclipToggle.Size = UDim2.new(0, 50, 0, 24)
+NoclipToggle.Text = "OFF"
+NoclipToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+NoclipToggle.TextSize = 12
+NoclipToggle.Font = Enum.Font.GothamBold
+NoclipToggle.AutoButtonColor = false
+
+local NoclipToggleCorner = Instance.new("UICorner")
+NoclipToggleCorner.CornerRadius = UDim.new(0, 12)
+NoclipToggleCorner.Parent = NoclipToggle
+
+local NoclipLabel = Instance.new("TextLabel")
+NoclipLabel.Name = "NoclipLabel"
+NoclipLabel.Parent = NoclipCategory
+NoclipLabel.BackgroundTransparency = 1
+NoclipLabel.Position = UDim2.new(0, 70, 0, 35)
+NoclipLabel.Size = UDim2.new(0.7, 0, 0, 24)
+NoclipLabel.Font = Enum.Font.GothamMedium
+NoclipLabel.Text = "Walk through walls"
+NoclipLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+NoclipLabel.TextSize = 12
+NoclipLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Speed Category
+local SpeedCategory = CreateCategory("Movement", "⚡")
+SpeedCategory.Size = UDim2.new(1, 0, 0, 140)
+
+-- Speed Slider
+local SpeedSliderFrame = Instance.new("Frame")
+SpeedSliderFrame.Name = "SpeedSliderFrame"
+SpeedSliderFrame.Parent = SpeedCategory
+SpeedSliderFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+SpeedSliderFrame.BorderSizePixel = 0
+SpeedSliderFrame.Position = UDim2.new(0, 12, 0, 35)
+SpeedSliderFrame.Size = UDim2.new(0.6, 0, 0, 20)
+
+local SliderCorner = Instance.new("UICorner")
+SliderCorner.CornerRadius = UDim.new(0, 10)
+SliderCorner.Parent = SpeedSliderFrame
+
+local SpeedSliderFill = Instance.new("Frame")
+SpeedSliderFill.Name = "SpeedSliderFill"
+SpeedSliderFill.Parent = SpeedSliderFrame
+SpeedSliderFill.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
+SpeedSliderFill.BorderSizePixel = 0
+SpeedSliderFill.Size = UDim2.new(0.16, 0, 1, 0)
+
+local FillCorner = Instance.new("UICorner")
+FillCorner.CornerRadius = UDim.new(0, 10)
+FillCorner.Parent = SpeedSliderFill
+
+local SpeedValueLabel = Instance.new("TextLabel")
+SpeedValueLabel.Name = "SpeedValueLabel"
+SpeedValueLabel.Parent = SpeedCategory
+SpeedValueLabel.BackgroundTransparency = 1
+SpeedValueLabel.Position = UDim2.new(0.68, 0, 0, 35)
+SpeedValueLabel.Size = UDim2.new(0.25, 0, 0, 20)
+SpeedValueLabel.Font = Enum.Font.GothamBold
+SpeedValueLabel.Text = "16"
+SpeedValueLabel.TextColor3 = Color3.fromRGB(52, 152, 219)
+SpeedValueLabel.TextSize = 14
+SpeedValueLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+local SpeedMinLabel = Instance.new("TextLabel")
+SpeedMinLabel.Name = "SpeedMinLabel"
+SpeedMinLabel.Parent = SpeedCategory
+SpeedMinLabel.BackgroundTransparency = 1
+SpeedMinLabel.Position = UDim2.new(0, 12, 0, 55)
+SpeedMinLabel.Size = UDim2.new(0, 30, 0, 15)
+SpeedMinLabel.Font = Enum.Font.GothamMedium
+SpeedMinLabel.Text = "1"
+SpeedMinLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+SpeedMinLabel.TextSize = 10
+
+local SpeedMaxLabel = Instance.new("TextLabel")
+SpeedMaxLabel.Name = "SpeedMaxLabel"
+SpeedMaxLabel.Parent = SpeedCategory
+SpeedMaxLabel.BackgroundTransparency = 1
+SpeedMaxLabel.Position = UDim2.new(0.57, 0, 0, 55)
+SpeedMaxLabel.Size = UDim2.new(0, 30, 0, 15)
+SpeedMaxLabel.Font = Enum.Font.GothamMedium
+SpeedMaxLabel.Text = "200"
+SpeedMaxLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+SpeedMaxLabel.TextSize = 10
+
+-- Speed Toggle
+local SpeedToggle = Instance.new("TextButton")
+SpeedToggle.Name = "SpeedToggle"
+SpeedToggle.Parent = SpeedCategory
+SpeedToggle.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+SpeedToggle.BorderSizePixel = 0
+SpeedToggle.Position = UDim2.new(0, 12, 0, 75)
+SpeedToggle.Size = UDim2.new(0, 50, 0, 24)
+SpeedToggle.Text = "OFF"
+SpeedToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedToggle.TextSize = 12
+SpeedToggle.Font = Enum.Font.GothamBold
+SpeedToggle.AutoButtonColor = false
+
+local SpeedToggleCorner = Instance.new("UICorner")
+SpeedToggleCorner.CornerRadius = UDim.new(0, 12)
+SpeedToggleCorner.Parent = SpeedToggle
+
+local SpeedBoostLabel = Instance.new("TextLabel")
+SpeedBoostLabel.Name = "SpeedBoostLabel"
+SpeedBoostLabel.Parent = SpeedCategory
+SpeedBoostLabel.BackgroundTransparency = 1
+SpeedBoostLabel.Position = UDim2.new(0, 70, 0, 75)
+SpeedBoostLabel.Size = UDim2.new(0.7, 0, 0, 24)
+SpeedBoostLabel.Font = Enum.Font.GothamMedium
+SpeedBoostLabel.Text = "Speed Boost"
+SpeedBoostLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+SpeedBoostLabel.TextSize = 12
+SpeedBoostLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Current Speed Display
+local CurrentSpeedLabel = Instance.new("TextLabel")
+CurrentSpeedLabel.Name = "CurrentSpeedLabel"
+CurrentSpeedLabel.Parent = SpeedCategory
+CurrentSpeedLabel.BackgroundTransparency = 1
+CurrentSpeedLabel.Position = UDim2.new(0, 12, 0, 105)
+CurrentSpeedLabel.Size = UDim2.new(0.9, 0, 0, 20)
+CurrentSpeedLabel.Font = Enum.Font.GothamMedium
+CurrentSpeedLabel.Text = "Current: "..tostring(Settings.DefaultSpeed)
+CurrentSpeedLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+CurrentSpeedLabel.TextSize = 11
+CurrentSpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Functions
+local function UpdateNoclip()
+    if Settings.Noclip then
+        NoclipToggle.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+        NoclipToggle.Text = "ON"
+    else
+        NoclipToggle.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+        NoclipToggle.Text = "OFF"
+    end
+end
+
+local function UpdateSpeedToggle()
+    if Settings.SpeedBoost then
+        SpeedToggle.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+        SpeedToggle.Text = "ON"
+    else
+        SpeedToggle.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+        SpeedToggle.Text = "OFF"
+    end
+end
+
+local function UpdateSpeedSlider()
+    local percentage = (Settings.SpeedValue - 1) / (200 - 1)
+    SpeedSliderFill.Size = UDim2.new(percentage, 0, 1, 0)
+    SpeedValueLabel.Text = tostring(Settings.SpeedValue)
+end
+
+local function ToggleNoclip()
+    Settings.Noclip = not Settings.Noclip
+    UpdateNoclip()
+    
+    if NoclipConnection then
+        NoclipConnection:Disconnect()
+        NoclipConnection = nil
+    end
+    
+    if Settings.Noclip then
+        NoclipConnection = RunService.Stepped:Connect(function()
+            if Settings.Noclip and Character and Character.Parent then
+                local currentCharacter = LocalPlayer.Character
+                if currentCharacter then
+                    for _, part in pairs(currentCharacter:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        -- Restore collisions
+        local currentCharacter = LocalPlayer.Character
+        if currentCharacter then
+            for _, part in pairs(currentCharacter:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end
+end
+
+local function ApplySpeed()
+    if Settings.SpeedBoost and Character and Character.Parent and Humanoid then
+        Humanoid.WalkSpeed = Settings.SpeedValue
+        CurrentSpeedLabel.Text = "Current: "..tostring(Settings.SpeedValue)
+    elseif Character and Humanoid then
+        Humanoid.WalkSpeed = Settings.DefaultSpeed
+        CurrentSpeedLabel.Text = "Current: "..tostring(Settings.DefaultSpeed)
+    end
+end
+
+local function ToggleSpeed()
+    Settings.SpeedBoost = not Settings.SpeedBoost
+    UpdateSpeedToggle()
+    ApplySpeed()
+end
+
+local function UpdateSliderFromMouse(x)
+    local relativeX = x - SpeedSliderFrame.AbsolutePosition.X
+    local percentage = math.clamp(relativeX / SpeedSliderFrame.AbsoluteSize.X, 0, 1)
+    Settings.SpeedValue = math.floor(1 + (percentage * (200 - 1)))
+    UpdateSpeedSlider()
+    ApplySpeed()
+end
+
+-- Button Animations
+local function CreateButtonAnimation(button)
+    local HoverAnim = Instance.new("Tween")
+    button.MouseEnter:Connect(function()
+        if button.BackgroundColor3 == Color3.fromRGB(231, 76, 60) or 
+           button.BackgroundColor3 == Color3.fromRGB(46, 204, 113) then
+            button.BackgroundTransparency = 0.1
+        end
+    end)
+    
+    button.MouseLeave:Connect(function()
+        button.BackgroundTransparency = 0
     end)
 end
 
--- Função para criar botão
-local function AddButton(text, callback)
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, -10, 0, 35)
-    Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    Btn.Text = text
-    Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Btn.TextSize = 12
-    Btn.Font = Enum.Font.Gotham
-    Btn.BorderSizePixel = 0
-    Btn.AutoButtonColor = false
-    Btn.Parent = Scroll
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 5)
-    
-    Btn.MouseEnter:Connect(function() Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 75) end)
-    Btn.MouseLeave:Connect(function() Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55) end)
-    Btn.MouseButton1Click:Connect(callback)
-end
+CreateButtonAnimation(NoclipToggle)
+CreateButtonAnimation(SpeedToggle)
+CreateButtonAnimation(MinimizeButton)
+CreateButtonAnimation(CloseButton)
 
--- Seção de título
-local function AddSection(text)
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, -10, 0, 25)
-    Label.BackgroundTransparency = 1
-    Label.Text = text
-    Label.TextColor3 = Color3.fromRGB(0, 200, 255)
-    Label.TextSize = 13
-    Label.Font = Enum.Font.GothamBold
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Scroll
-end
+-- Minimize/Close Functions
+local Minimized = false
+local OriginalSize = MainFrame.Size
 
--- Construir UI
-AddSection("⚔️ COMBATE")
-AddToggle("Auto Parry (Defesa M1)", 0, function(v) Config.AutoParry = v end)
-AddToggle("ESP Hitboxes (Mobs)", 0, function(v) Config.HitboxESP = v end)
-
-AddSection("👑 BOSS FARM")
-AddToggle("Auto Farm Boss", 0, function(v) Config.AutoFarm = v end)
-AddToggle("Auto Atacar Boss", 0, function(v) Config.AutoAttack = v end)
-
--- Dropdown posição
-local PosFrame = Instance.new("Frame")
-PosFrame.Size = UDim2.new(1, -10, 0, 35)
-PosFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
-PosFrame.BorderSizePixel = 0
-PosFrame.Parent = Scroll
-Instance.new("UICorner", PosFrame).CornerRadius = UDim.new(0, 5)
-
-local PosLabel = Instance.new("TextLabel")
-PosLabel.Size = UDim2.new(0.5, 0, 1, 0)
-PosLabel.Position = UDim2.new(0, 10, 0, 0)
-PosLabel.BackgroundTransparency = 1
-PosLabel.Text = "Posição:"
-PosLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-PosLabel.TextSize = 12
-PosLabel.Font = Enum.Font.Gotham
-PosLabel.TextXAlignment = Enum.TextXAlignment.Left
-PosLabel.Parent = PosFrame
-
-local PosBtn = Instance.new("TextButton")
-PosBtn.Size = UDim2.new(0, 100, 0, 26)
-PosBtn.Position = UDim2.new(1, -105, 0.5, -13)
-PosBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-PosBtn.Text = "Frente"
-PosBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-PosBtn.TextSize = 11
-PosBtn.Font = Enum.Font.Gotham
-PosBtn.BorderSizePixel = 0
-PosBtn.AutoButtonColor = false
-PosBtn.Parent = PosFrame
-Instance.new("UICorner", PosBtn).CornerRadius = UDim.new(0, 5)
-
-local PosList = Instance.new("Frame")
-PosList.Size = UDim2.new(1, 0, 0, 140)
-PosList.Position = UDim2.new(0, 0, 1, 3)
-PosList.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-PosList.BorderSizePixel = 0
-PosList.Visible = false
-PosList.ZIndex = 10
-PosList.Parent = PosFrame
-Instance.new("UICorner", PosList).CornerRadius = UDim.new(0, 5)
-
-for _, pos in ipairs({"Frente", "Atrás", "Acima", "Abaixo"}) do
-    local Opt = Instance.new("TextButton")
-    Opt.Size = UDim2.new(1, 0, 0, 35)
-    Opt.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-    Opt.Text = pos
-    Opt.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Opt.TextSize = 12
-    Opt.Font = Enum.Font.Gotham
-    Opt.BorderSizePixel = 0
-    Opt.ZIndex = 11
-    Opt.Parent = PosList
-    
-    Opt.MouseEnter:Connect(function() Opt.BackgroundColor3 = Color3.fromRGB(70, 70, 85) end)
-    Opt.MouseLeave:Connect(function() Opt.BackgroundColor3 = Color3.fromRGB(50, 50, 65) end)
-    Opt.MouseButton1Click:Connect(function()
-        Config.Position = pos
-        PosBtn.Text = pos
-        PosList.Visible = false
-    end)
-end
-
-PosBtn.MouseButton1Click:Connect(function()
-    PosList.Visible = not PosList.Visible
+MinimizeButton.MouseButton1Click:Connect(function()
+    Minimized = not Minimized
+    if Minimized then
+        MainFrame:TweenSize(UDim2.new(0, 300, 0, 45), "Out", "Quad", 0.3)
+    else
+        MainFrame:TweenSize(OriginalSize, "Out", "Quad", 0.3)
+    end
 end)
 
--- Lista de bosses
-AddSection("📋 BOSSES ENCONTRADOS")
-
-local BossScroll = Instance.new("ScrollingFrame")
-BossScroll.Size = UDim2.new(1, -10, 0, 120)
-BossScroll.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-BossScroll.BorderSizePixel = 0
-BossScroll.ScrollBarThickness = 2
-BossScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-BossScroll.Parent = Scroll
-Instance.new("UICorner", BossScroll).CornerRadius = UDim.new(0, 5)
-
-local BossList = Instance.new("UIListLayout")
-BossList.Padding = UDim.new(0, 2)
-BossList.Parent = BossScroll
-
-AddButton("🔄 Atualizar Lista de Bosses", function()
-    for _, v in ipairs(BossScroll:GetChildren()) do
-        if v:IsA("TextButton") then v:Destroy() end
+CloseButton.MouseButton1Click:Connect(function()
+    MainFrame:TweenSize(UDim2.new(0, 0, 0, 0), "Out", "Quad", 0.2, true)
+    task.wait(0.2)
+    ScreenGui:Destroy()
+    if NoclipConnection then
+        NoclipConnection:Disconnect()
     end
-    
-    local bosses = FindTargets("boss")
-    for _, boss in ipairs(bosses) do
-        local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1, -4, 0, 25)
-        Btn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-        Btn.Text = string.format("%s [%d%%]", boss.Name, math.floor(boss.Health/boss.MaxHealth*100))
-        Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        Btn.TextSize = 10
-        Btn.Font = Enum.Font.Gotham
-        Btn.BorderSizePixel = 0
-        Btn.AutoButtonColor = false
-        Btn.Parent = BossScroll
-        
-        Btn.MouseButton1Click:Connect(function()
-            Config.TargetBoss = boss
-            for _, b in ipairs(BossScroll:GetChildren()) do
-                if b:IsA("TextButton") then b.BackgroundColor3 = Color3.fromRGB(45, 45, 60) end
+end)
+
+-- Toggle Buttons
+NoclipToggle.MouseButton1Click:Connect(ToggleNoclip)
+SpeedToggle.MouseButton1Click:Connect(ToggleSpeed)
+
+-- Slider Interaction
+SpeedSliderFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        UpdateSliderFromMouse(input.Position.X)
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.Change then
+                UpdateSliderFromMouse(input.Position.X)
             end
-            Btn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
         end)
     end
+end)
+
+-- Dragging Functionality
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        Settings.Dragging = true
+        Settings.DragStart = input.Position
+        Settings.StartPos = MainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                Settings.Dragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if Settings.Dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - Settings.DragStart
+        MainFrame.Position = UDim2.new(
+            Settings.StartPos.X.Scale,
+            Settings.StartPos.X.Offset + delta.X,
+            Settings.StartPos.Y.Scale,
+            Settings.StartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Character Refresh Functions
+local function OnCharacterAdded(newCharacter)
+    Character = newCharacter
+    Humanoid = Character:WaitForChild("Humanoid")
+    RootPart = Character:WaitForChild("HumanoidRootPart")
     
-    BossScroll.CanvasSize = UDim2.new(0, 0, 0, #bosses * 27)
-end)
+    -- Reapply effects with delay to ensure character is fully loaded
+    task.wait(0.5)
+    
+    if Settings.Noclip then
+        ToggleNoclip()
+        ToggleNoclip()
+    end
+    
+    if Settings.SpeedBoost then
+        ApplySpeed()
+    end
+    
+    -- Update current speed display
+    CurrentSpeedLabel.Text = "Current: "..tostring(Humanoid.WalkSpeed)
+end
 
--- Sistema de arraste
-local drag, start, pos = false, nil, nil
-Title.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 then
-        drag, start, pos = true, i.Position, Main.Position
+local function OnCharacterRemoving()
+    if NoclipConnection then
+        NoclipConnection:Disconnect()
+        NoclipConnection = nil
+    end
+end
+
+-- Connect to character events
+LocalPlayer.CharacterAdded:Connect(OnCharacterAdded)
+if Character then
+    Character:GetPropertyChangedSignal("Parent"):Connect(function()
+        if not Character.Parent then
+            OnCharacterRemoving()
+        end
+    end)
+end
+
+-- Initial Setup
+UpdateNoclip()
+UpdateSpeedToggle()
+UpdateSpeedSlider()
+CurrentSpeedLabel.Text = "Current: "..tostring(Settings.DefaultSpeed)
+
+-- Error Handling
+local function SafeCall(func, ...)
+    local success, result = pcall(func, ...)
+    if not success then
+        warn("Movement GUI Error: "..tostring(result))
+    end
+end
+
+-- Periodic check to ensure stability
+task.spawn(function()
+    while ScreenGui.Parent do
+        SafeCall(function()
+            if Settings.Noclip and (not Character or not Character.Parent) then
+                -- Character was removed while noclip was active
+                if NoclipConnection then
+                    NoclipConnection:Disconnect()
+                    NoclipConnection = nil
+                end
+            end
+            
+            if Settings.SpeedBoost and Character and Character.Parent and Humanoid then
+                if Humanoid.WalkSpeed ~= Settings.SpeedValue then
+                    ApplySpeed()
+                end
+            end
+        end)
+        
+        task.wait(1)
     end
 end)
 
-Services.UserInputService.InputChanged:Connect(function(i)
-    if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
-        local d = i.Position - start
-        Main.Position = UDim2.new(pos.X.Scale, pos.X.Offset + d.X, pos.Y.Scale, pos.Y.Offset + d.Y)
-    end
-end)
-
-Services.UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
-end)
-
-Close.MouseButton1Click:Connect(function() SG:Destroy() end)
-
--- Loop principal ultra otimizado
-Services.RunService.Heartbeat:Connect(function()
-    pcall(AutoParry)
-    pcall(UpdateESP)
-    pcall(AutoFarm)
-end)
-
-print("✅ VV Ultimatum Lite - Pronto!")
-print("📌 Dica: Fique a 20 studs do boss para não tomar dano!")
+-- Initial animation
+MainFrame.Size = UDim2.new(0, 0, 0, 0)
+MainFrame:TweenSize(UDim2.new(0, 300, 0, 350), "Out", "Back", 0.5)
