@@ -1,97 +1,369 @@
 --[[
-    VV Ultimatum - Interface Avançada v2.0
-    Script corrigido e funcional
+    VV Ultimatum - Interface Avançada v3.0
+    Script otimizado e funcional
+    Foco: Giant Dragonfly, Auto Farm, Hitbox de Mobs
 ]]
 
--- Proteção anti-erro
-local success, errorMsg = pcall(function()
-
--- Serviços do Roblox
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
-
--- Variáveis principais
-local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
-local Character = Player.Character or Player.CharacterAdded:Wait()
-
--- Configurações
-local Config = {
-    AutoDefense = false,
-    ShowHitboxes = false,
-    HitboxColor = Color3.fromRGB(255, 0, 0),
-    HitboxTransparency = 0.5,
-    TargetBoss = nil,
-    CombatPosition = "Acima",
-    AttackDistance = 15,
-    UpdateInterval = 1
+local Services = {
+    Players = game:GetService("Players"),
+    RunService = game:GetService("RunService"),
+    UserInputService = game:GetService("UserInputService"),
+    TweenService = game:GetService("TweenService"),
+    ReplicatedStorage = game:GetService("ReplicatedStorage"),
+    Workspace = game:GetService("Workspace"),
+    HttpService = game:GetService("HttpService")
 }
 
--- Criar ScreenGui
+local Player = Services.Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+-- Configurações otimizadas
+local Config = {
+    AutoParry = {
+        Enabled = false,
+        Range = 25,
+        Cooldown = 0.15,
+        LastParry = 0
+    },
+    HitboxESP = {
+        Enabled = false,
+        Color = Color3.fromRGB(255, 50, 50),
+        Transparency = 0.6,
+        Size = Vector3.new(4, 5, 4),
+        OnlyMobs = true -- Apenas monstros/hollows
+    },
+    BossFarm = {
+        Enabled = false,
+        TargetBoss = nil,
+        BossName = "Giant Dragonfly",
+        Position = "Frente",
+        Distance = 12,
+        AutoAttack = false,
+        AttackRange = 15
+    },
+    Combat = {
+        Positions = {"Frente", "Atrás", "Acima", "Abaixo"},
+        CurrentPosition = "Frente"
+    }
+}
+
+-- Cache de objetos para performance
+local Cache = {
+    Hitboxes = {},
+    Bosses = {},
+    LastUpdate = 0,
+    UpdateInterval = 0.5
+}
+
+-- Função otimizada para encontrar mobs (apenas monstros/hollows)
+local function GetMobs()
+    local mobs = {}
+    local now = tick()
+    
+    -- Cache para evitar processamento excessivo
+    if now - Cache.LastUpdate < Cache.UpdateInterval then
+        return Cache.CachedMobs or {}
+    end
+    
+    for _, obj in ipairs(Services.Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            local humanoid = obj.Humanoid
+            local name = obj.Name:lower()
+            
+            -- Filtrar apenas mobs (não players, não NPCs amigáveis)
+            if humanoid.Health > 0 and not Services.Players:GetPlayerFromCharacter(obj) then
+                local isMob = false
+                
+                -- Verificar se é um mob/hollow
+                if name:find("hollow") or 
+                   name:find("menos") or 
+                   name:find("arrancar") or
+                   name:find("vasto") or
+                   name:find("monster") or
+                   name:find("mob") or
+                   name:find("enemy") or
+                   obj:GetAttribute("IsMob") or
+                   obj:GetAttribute("IsEnemy") then
+                    isMob = true
+                end
+                
+                -- Verificar por tags de NPC inimigo
+                local humanoidRootPart = obj.HumanoidRootPart
+                if humanoidRootPart:GetAttribute("IsEnemy") or 
+                   humanoidRootPart:GetAttribute("IsMob") then
+                    isMob = true
+                end
+                
+                if isMob then
+                    table.insert(mobs, {
+                        Model = obj,
+                        Humanoid = humanoid,
+                        RootPart = humanoidRootPart,
+                        Name = obj.Name,
+                        Health = humanoid.Health,
+                        MaxHealth = humanoid.MaxHealth,
+                        Position = humanoidRootPart.Position
+                    })
+                end
+            end
+        end
+    end
+    
+    Cache.CachedMobs = mobs
+    Cache.LastUpdate = now
+    return mobs
+end
+
+-- Função otimizada para encontrar bosses específicos
+local function GetBosses()
+    local bosses = {}
+    
+    for _, obj in ipairs(Services.Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            local humanoid = obj.Humanoid
+            local name = obj.Name
+            
+            -- Verificar se é um boss
+            local isBoss = false
+            
+            -- Boss específico: Giant Dragonfly
+            if name:lower():find("giant") and name:lower():find("dragonfly") then
+                isBoss = true
+            end
+            
+            -- Outros bosses
+            if name:lower():find("boss") or
+               name:lower():find("vasto") and name:lower():find("lorde") or
+               obj:GetAttribute("IsBoss") or
+               obj:FindFirstChild("Boss") then
+                isBoss = true
+            end
+            
+            if isBoss and humanoid.Health > 0 then
+                table.insert(bosses, {
+                    Model = obj,
+                    Humanoid = humanoid,
+                    RootPart = obj.HumanoidRootPart,
+                    Name = name,
+                    Health = humanoid.Health,
+                    MaxHealth = humanoid.MaxHealth,
+                    Position = obj.HumanoidRootPart.Position
+                })
+            end
+        end
+    end
+    
+    return bosses
+end
+
+-- Sistema de Auto Parry otimizado
+local function AutoParry()
+    if not Config.AutoParry.Enabled then return end
+    
+    local character = Player.Character
+    if not character then return end
+    
+    local now = tick()
+    if now - Config.AutoParry.LastParry < Config.AutoParry.Cooldown then return end
+    
+    local mobs = GetMobs()
+    local characterPosition = character:GetPivot().Position
+    
+    for _, mob in ipairs(mobs) do
+        local distance = (mob.Position - characterPosition).Magnitude
+        if distance <= Config.AutoParry.Range then
+            -- Verificar se o mob está atacando
+            local animator = mob.Humanoid:FindFirstChild("Animator")
+            if animator then
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                    local animId = track.Animation.AnimationId:lower()
+                    if animId:find("attack") or animId:find("m1") or animId:find("hit") or animId:find("punch") then
+                        -- Executar parry
+                        pcall(function()
+                            local remotes = Services.ReplicatedStorage:FindFirstChild("Remotes")
+                            if remotes then
+                                local combatRemote = remotes:FindFirstChild("Combat") or remotes:FindFirstChild("Parry")
+                                if combatRemote then
+                                    combatRemote:FireServer("Parry", true)
+                                    Config.AutoParry.LastParry = now
+                                    print("[Auto Parry] ✓ Defendeu ataque de " .. mob.Name)
+                                    return
+                                end
+                            end
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Sistema de ESP para Hitboxes de mobs
+local function UpdateHitboxESP()
+    -- Limpar hitboxes se desativado
+    if not Config.HitboxESP.Enabled then
+        for _, hitbox in ipairs(Cache.Hitboxes) do
+            if hitbox and hitbox.Parent then
+                hitbox:Destroy()
+            end
+        end
+        Cache.Hitboxes = {}
+        return
+    end
+    
+    local mobs = GetMobs()
+    local activeHitboxes = {}
+    
+    for _, mob in ipairs(mobs) do
+        local hitbox = mob.Model:FindFirstChild("ESP_Hitbox")
+        
+        if not hitbox then
+            -- Criar hitbox visual
+            hitbox = Instance.new("Part")
+            hitbox.Name = "ESP_Hitbox"
+            hitbox.Size = Config.HitboxESP.Size
+            hitbox.Color = Config.HitboxESP.Color
+            hitbox.Transparency = Config.HitboxESP.Transparency
+            hitbox.Material = Enum.Material.ForceField
+            hitbox.Anchored = true
+            hitbox.CanCollide = false
+            hitbox.CanQuery = false
+            hitbox.CanTouch = false
+            hitbox.Parent = mob.Model
+            
+            -- Adicionar highlight
+            local highlight = Instance.new("Highlight")
+            highlight.FillColor = Config.HitboxESP.Color
+            highlight.FillTransparency = Config.HitboxESP.Transparency
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.OutlineTransparency = 0.3
+            highlight.Parent = hitbox
+        end
+        
+        -- Atualizar posição
+        hitbox.Position = mob.RootPart.Position
+        table.insert(activeHitboxes, hitbox)
+    end
+    
+    -- Remover hitboxes de mobs mortos
+    for _, hitbox in ipairs(Cache.Hitboxes) do
+        if hitbox and hitbox.Parent and not table.find(activeHitboxes, hitbox) then
+            hitbox:Destroy()
+        end
+    end
+    
+    Cache.Hitboxes = activeHitboxes
+end
+
+-- Sistema de Auto Farm do Boss
+local function AutoFarmBoss()
+    if not Config.BossFarm.Enabled then return end
+    if not Config.BossFarm.TargetBoss then return end
+    
+    local character = Player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local boss = Config.BossFarm.TargetBoss
+    if not boss.Model:FindFirstChild("HumanoidRootPart") then return end
+    
+    local humanoidRootPart = character.HumanoidRootPart
+    local bossRootPart = boss.Model.HumanoidRootPart
+    local bossPosition = bossRootPart.Position
+    
+    -- Calcular posição ideal baseada na configuração
+    local targetPosition = bossPosition
+    local distance = Config.BossFarm.Distance
+    
+    if Config.BossFarm.Position == "Frente" then
+        targetPosition = bossPosition + (bossRootPart.CFrame.LookVector * distance)
+    elseif Config.BossFarm.Position == "Atrás" then
+        targetPosition = bossPosition + (-bossRootPart.CFrame.LookVector * distance)
+    elseif Config.BossFarm.Position == "Acima" then
+        targetPosition = bossPosition + Vector3.new(0, distance, 0)
+    elseif Config.BossFarm.Position == "Abaixo" then
+        targetPosition = bossPosition + Vector3.new(0, -distance, 0)
+    end
+    
+    -- Teleporte suave
+    local currentDistance = (humanoidRootPart.Position - targetPosition).Magnitude
+    if currentDistance > 3 then
+        humanoidRootPart.CFrame = CFrame.new(targetPosition)
+    end
+    
+    -- Auto ataque
+    if Config.BossFarm.AutoAttack and boss.Humanoid.Health > 0 then
+        local attackDistance = (humanoidRootPart.Position - bossPosition).Magnitude
+        if attackDistance <= Config.BossFarm.AttackRange then
+            pcall(function()
+                local remotes = Services.ReplicatedStorage:FindFirstChild("Remotes")
+                if remotes then
+                    local combatRemote = remotes:FindFirstChild("Combat") or remotes:FindFirstChild("Attack")
+                    if combatRemote then
+                        combatRemote:FireServer("M1")
+                    end
+                end
+            end)
+        end
+    end
+end
+
+-- =============== INTERFACE GRÁFICA ===============
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VVUltimatumUI"
 ScreenGui.Parent = PlayerGui
 ScreenGui.ResetOnSpawn = false
 
--- Frame principal
 local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 400, 0, 550)
-MainFrame.Position = UDim2.new(0.5, -200, 0.2, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+MainFrame.Size = UDim2.new(0, 420, 0, 600)
+MainFrame.Position = UDim2.new(0.5, -210, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 
--- Borda arredondada
 local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.CornerRadius = UDim.new(0, 10)
 UICorner.Parent = MainFrame
 
 -- Barra de título
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 40)
-TitleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+TitleBar.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = MainFrame
 
 local TitleCorner = Instance.new("UICorner")
-TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.CornerRadius = UDim.new(0, 10)
 TitleCorner.Parent = TitleBar
 
 local TitlePatch = Instance.new("Frame")
-TitlePatch.Size = UDim2.new(1, 0, 0, 8)
-TitlePatch.Position = UDim2.new(0, 0, 1, -8)
-TitlePatch.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+TitlePatch.Size = UDim2.new(1, 0, 0, 10)
+TitlePatch.Position = UDim2.new(0, 0, 1, -10)
+TitlePatch.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
 TitlePatch.BorderSizePixel = 0
 TitlePatch.Parent = TitleBar
 
--- Título
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -50, 1, 0)
 TitleLabel.Position = UDim2.new(0, 15, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚔️ VV Ultimatum - Advanced"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.Text = "⚔️ VV Ultimatum Pro"
+TitleLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
 TitleLabel.TextSize = 16
-TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.Font = Enum.Font.GothamBlack
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = TitleBar
 
--- Botão fechar
 local CloseButton = Instance.new("TextButton")
 CloseButton.Size = UDim2.new(0, 30, 0, 30)
 CloseButton.Position = UDim2.new(1, -35, 0, 5)
-CloseButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+CloseButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
 CloseButton.Text = "✕"
 CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 CloseButton.TextSize = 18
 CloseButton.Font = Enum.Font.GothamBold
 CloseButton.BorderSizePixel = 0
+CloseButton.AutoButtonColor = false
 CloseButton.Parent = TitleBar
 
 local CloseCorner = Instance.new("UICorner")
@@ -106,29 +378,29 @@ ScrollingFrame.BackgroundTransparency = 1
 ScrollingFrame.BorderSizePixel = 0
 ScrollingFrame.ScrollBarThickness = 4
 ScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
-ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 1200)
+ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 1100)
 ScrollingFrame.Parent = MainFrame
 
 local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 10)
+UIListLayout.Padding = UDim.new(0, 8)
 UIListLayout.Parent = ScrollingFrame
 
--- Função para criar seções
-function CreateSection(title, height)
+-- Funções da UI
+local function CreateSection(title, height)
     local Section = Instance.new("Frame")
     Section.Size = UDim2.new(1, -20, 0, height)
     Section.Position = UDim2.new(0, 10, 0, 0)
-    Section.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    Section.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
     Section.BorderSizePixel = 0
     Section.Parent = ScrollingFrame
     
     local SectionCorner = Instance.new("UICorner")
-    SectionCorner.CornerRadius = UDim.new(0, 6)
+    SectionCorner.CornerRadius = UDim.new(0, 8)
     SectionCorner.Parent = Section
     
     local SectionTitle = Instance.new("TextLabel")
     SectionTitle.Size = UDim2.new(1, -20, 0, 30)
-    SectionTitle.Position = UDim2.new(0, 10, 0, 5)
+    SectionTitle.Position = UDim2.new(0, 10, 0, 8)
     SectionTitle.BackgroundTransparency = 1
     SectionTitle.Text = title
     SectionTitle.TextColor3 = Color3.fromRGB(0, 200, 255)
@@ -140,16 +412,15 @@ function CreateSection(title, height)
     return Section
 end
 
--- Função para criar Toggle
-function CreateToggle(parent, text, yPosition, callback)
+local function CreateToggle(parent, text, yPos, callback)
     local ToggleFrame = Instance.new("Frame")
-    ToggleFrame.Size = UDim2.new(1, -20, 0, 40)
-    ToggleFrame.Position = UDim2.new(0, 10, 0, yPosition)
+    ToggleFrame.Size = UDim2.new(1, -20, 0, 35)
+    ToggleFrame.Position = UDim2.new(0, 10, 0, yPos)
     ToggleFrame.BackgroundTransparency = 1
     ToggleFrame.Parent = parent
     
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.6, 0, 1, 0)
+    Label.Size = UDim2.new(0.65, 0, 1, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
     Label.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -159,19 +430,19 @@ function CreateToggle(parent, text, yPosition, callback)
     Label.Parent = ToggleFrame
     
     local Button = Instance.new("TextButton")
-    Button.Size = UDim2.new(0, 70, 0, 30)
-    Button.Position = UDim2.new(1, -70, 0.5, -15)
-    Button.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
+    Button.Size = UDim2.new(0, 65, 0, 28)
+    Button.Position = UDim2.new(1, -65, 0.5, -14)
+    Button.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
     Button.Text = "OFF"
     Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Button.TextSize = 12
+    Button.TextSize = 11
     Button.Font = Enum.Font.GothamBold
     Button.BorderSizePixel = 0
     Button.AutoButtonColor = false
     Button.Parent = ToggleFrame
     
     local ButtonCorner = Instance.new("UICorner")
-    ButtonCorner.CornerRadius = UDim.new(0, 6)
+    ButtonCorner.CornerRadius = UDim.new(0, 14)
     ButtonCorner.Parent = Button
     
     local enabled = false
@@ -182,7 +453,7 @@ function CreateToggle(parent, text, yPosition, callback)
             Button.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
             Button.Text = "ON"
         else
-            Button.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
+            Button.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
             Button.Text = "OFF"
         end
         callback(enabled)
@@ -191,15 +462,14 @@ function CreateToggle(parent, text, yPosition, callback)
     return Button
 end
 
--- Função para criar botão normal
-function CreateButton(parent, text, yPosition, callback)
+local function CreateButton(parent, text, yPos, callback)
     local Button = Instance.new("TextButton")
-    Button.Size = UDim2.new(1, -20, 0, 40)
-    Button.Position = UDim2.new(0, 10, 0, yPosition)
-    Button.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    Button.Size = UDim2.new(1, -20, 0, 35)
+    Button.Position = UDim2.new(0, 10, 0, yPos)
+    Button.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
     Button.Text = text
     Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Button.TextSize = 13
+    Button.TextSize = 12
     Button.Font = Enum.Font.Gotham
     Button.BorderSizePixel = 0
     Button.AutoButtonColor = false
@@ -210,11 +480,11 @@ function CreateButton(parent, text, yPosition, callback)
     ButtonCorner.Parent = Button
     
     Button.MouseEnter:Connect(function()
-        Button.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
+        Button.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
     end)
     
     Button.MouseLeave:Connect(function()
-        Button.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+        Button.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
     end)
     
     Button.MouseButton1Click:Connect(callback)
@@ -222,20 +492,19 @@ function CreateButton(parent, text, yPosition, callback)
     return Button
 end
 
--- Função para criar Dropdown
-function CreateDropdown(parent, options, yPosition, callback)
+local function CreateDropdown(parent, options, yPos, callback)
     local DropdownFrame = Instance.new("Frame")
-    DropdownFrame.Size = UDim2.new(1, -20, 0, 40)
-    DropdownFrame.Position = UDim2.new(0, 10, 0, yPosition)
+    DropdownFrame.Size = UDim2.new(1, -20, 0, 35)
+    DropdownFrame.Position = UDim2.new(0, 10, 0, yPos)
     DropdownFrame.BackgroundTransparency = 1
     DropdownFrame.Parent = parent
     
     local MainButton = Instance.new("TextButton")
     MainButton.Size = UDim2.new(1, 0, 1, 0)
-    MainButton.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-    MainButton.Text = options[1] or "Selecionar..."
+    MainButton.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+    MainButton.Text = options[1] or "Selecionar"
     MainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MainButton.TextSize = 13
+    MainButton.TextSize = 12
     MainButton.Font = Enum.Font.Gotham
     MainButton.BorderSizePixel = 0
     MainButton.AutoButtonColor = false
@@ -247,38 +516,35 @@ function CreateDropdown(parent, options, yPosition, callback)
     
     local DropList = Instance.new("Frame")
     DropList.Size = UDim2.new(1, 0, 0, #options * 35)
-    DropList.Position = UDim2.new(0, 0, 1, 5)
-    DropList.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    DropList.Position = UDim2.new(0, 0, 1, 3)
+    DropList.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
     DropList.BorderSizePixel = 0
     DropList.Visible = false
-    DropList.ZIndex = 5
+    DropList.ZIndex = 10
     DropList.Parent = DropdownFrame
     
     local DropCorner = Instance.new("UICorner")
     DropCorner.CornerRadius = UDim.new(0, 6)
     DropCorner.Parent = DropList
     
-    local DropLayout = Instance.new("UIListLayout")
-    DropLayout.Parent = DropList
-    
     for i, option in ipairs(options) do
         local OptionButton = Instance.new("TextButton")
         OptionButton.Size = UDim2.new(1, 0, 0, 35)
-        OptionButton.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+        OptionButton.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
         OptionButton.Text = option
         OptionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         OptionButton.TextSize = 12
         OptionButton.Font = Enum.Font.Gotham
         OptionButton.BorderSizePixel = 0
-        OptionButton.ZIndex = 6
+        OptionButton.ZIndex = 11
         OptionButton.Parent = DropList
         
         OptionButton.MouseEnter:Connect(function()
-            OptionButton.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
+            OptionButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
         end)
         
         OptionButton.MouseLeave:Connect(function()
-            OptionButton.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+            OptionButton.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
         end)
         
         OptionButton.MouseButton1Click:Connect(function()
@@ -295,152 +561,91 @@ function CreateDropdown(parent, options, yPosition, callback)
     return MainButton
 end
 
--- ===================== SEÇÃO 1: AUTO DEFESA =====================
-local DefenseSection = CreateSection("🛡️ Auto Defesa", 100)
+-- ===================== SEÇÕES =====================
 
-CreateToggle(DefenseSection, "Defesa Automática M1", 45, function(enabled)
-    Config.AutoDefense = enabled
-    if enabled then
-        print("[Auto Defesa] Ativada")
-    else
-        print("[Auto Defesa] Desativada")
+-- Seção 1: Auto Parry
+local ParrySection = CreateSection("🛡️ Auto Parry", 80)
+CreateToggle(ParrySection, "Defesa Automática (M1)", 45, function(enabled)
+    Config.AutoParry.Enabled = enabled
+end)
+
+-- Seção 2: ESP Hitboxes
+local ESPSection = CreateSection("👁️ ESP de Hitboxes", 80)
+CreateToggle(ESPSection, "Hitboxes dos Mobs", 45, function(enabled)
+    Config.HitboxESP.Enabled = enabled
+    if not enabled then
+        UpdateHitboxESP() -- Limpar hitboxes
     end
 end)
 
--- ===================== SEÇÃO 2: VISUALIZAÇÃO DE HITBOX =====================
-local HitboxSection = CreateSection("📦 Visualização de Hitbox", 100)
-
-CreateToggle(HitboxSection, "Mostrar Hitboxes", 45, function(enabled)
-    Config.ShowHitboxes = enabled
-    if enabled then
-        print("[Hitbox] Visualização ativada")
-    else
-        print("[Hitbox] Visualização desativada")
-        -- Remover todas as hitboxes visuais
-        for _, part in ipairs(Workspace:GetDescendants()) do
-            if part.Name == "HitboxVisual" then
-                part:Destroy()
-            end
-        end
-    end
-end)
-
--- ===================== SEÇÃO 3: GERENCIADOR DE BOSSES =====================
-local BossSection = CreateSection("👑 Gerenciador de Bosses", 220)
-
-local BossListLabel = Instance.new("TextLabel")
-BossListLabel.Size = UDim2.new(1, -20, 0, 20)
-BossListLabel.Position = UDim2.new(0, 10, 0, 45)
-BossListLabel.BackgroundTransparency = 1
-BossListLabel.Text = "Bosses encontrados:"
-BossListLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-BossListLabel.TextSize = 12
-BossListLabel.Font = Enum.Font.GothamBold
-BossListLabel.TextXAlignment = Enum.TextXAlignment.Left
-BossListLabel.Parent = BossSection
+-- Seção 3: Bosses
+local BossSection = CreateSection("👑 Bosses", 260)
 
 local BossListFrame = Instance.new("ScrollingFrame")
-BossListFrame.Size = UDim2.new(1, -20, 0, 80)
-BossListFrame.Position = UDim2.new(0, 10, 0, 70)
-BossListFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+BossListFrame.Size = UDim2.new(1, -20, 0, 130)
+BossListFrame.Position = UDim2.new(0, 10, 0, 45)
+BossListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 BossListFrame.BorderSizePixel = 0
 BossListFrame.ScrollBarThickness = 3
 BossListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 BossListFrame.Parent = BossSection
 
 local BossListCorner = Instance.new("UICorner")
-BossListCorner.CornerRadius = UDim.new(0, 4)
+BossListCorner.CornerRadius = UDim.new(0, 5)
 BossListCorner.Parent = BossListFrame
 
 local BossListLayout = Instance.new("UIListLayout")
 BossListLayout.Padding = UDim.new(0, 2)
 BossListLayout.Parent = BossListFrame
 
-local SelectedBossLabel = Instance.new("TextLabel")
-SelectedBossLabel.Size = UDim2.new(1, -20, 0, 20)
-SelectedBossLabel.Position = UDim2.new(0, 10, 0, 160)
-SelectedBossLabel.BackgroundTransparency = 1
-SelectedBossLabel.Text = "Nenhum boss selecionado"
-SelectedBossLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-SelectedBossLabel.TextSize = 11
-SelectedBossLabel.Font = Enum.Font.Gotham
-SelectedBossLabel.TextXAlignment = Enum.TextXAlignment.Left
-SelectedBossLabel.Parent = BossSection
+local SelectedBossText = Instance.new("TextLabel")
+SelectedBossText.Size = UDim2.new(1, -20, 0, 20)
+SelectedBossText.Position = UDim2.new(0, 10, 0, 180)
+SelectedBossText.BackgroundTransparency = 1
+SelectedBossText.Text = "🎯 Nenhum boss selecionado"
+SelectedBossText.TextColor3 = Color3.fromRGB(255, 200, 0)
+SelectedBossText.TextSize = 11
+SelectedBossText.Font = Enum.Font.Gotham
+SelectedBossText.TextXAlignment = Enum.TextXAlignment.Left
+SelectedBossText.Parent = BossSection
 
-CreateButton(BossSection, "🔄 Atualizar Lista", 190, function()
+CreateButton(BossSection, "🔄 Atualizar Lista", 205, function()
     UpdateBossList()
 end)
 
--- ===================== SEÇÃO 4: COMBATE =====================
-local CombatSection = CreateSection("⚔️ Sistema de Combate", 140)
+-- Seção 4: Auto Farm
+local FarmSection = CreateSection("⚔️ Auto Farm Boss", 160)
 
-CreateButton(CombatSection, "🎯 Ir até Boss Selecionado", 45, function()
-    MoveToTargetBoss()
+CreateToggle(FarmSection, "Auto Farm Ativo", 45, function(enabled)
+    Config.BossFarm.Enabled = enabled
+    if enabled and not Config.BossFarm.TargetBoss then
+        print("[Auto Farm] Selecione um boss primeiro!")
+    end
 end)
 
--- ===================== SEÇÃO 5: POSICIONAMENTO =====================
-local PositionSection = CreateSection("📍 Posicionamento Estratégico", 100)
-
-local positions = {"Acima", "Abaixo", "Atrás", "Frente"}
-CreateDropdown(PositionSection, positions, 45, function(selected)
-    Config.CombatPosition = selected
-    print("[Posicionamento] Definido para: " .. selected)
+CreateToggle(FarmSection, "Auto Atacar", 85, function(enabled)
+    Config.BossFarm.AutoAttack = enabled
 end)
 
--- ===================== FUNÇÕES DO SISTEMA =====================
+CreateDropdown(FarmSection, Config.Combat.Positions, 125, function(selected)
+    Config.BossFarm.Position = selected
+end)
 
--- Função para encontrar bosses
-function FindBosses()
-    local bosses = {}
-    
-    -- Procurar em todo o workspace
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
-            local humanoid = obj.Humanoid
-            if humanoid.Health > 0 then
-                -- Verificar se é um boss por nome ou características
-                local name = obj.Name:lower()
-                if name:find("boss") or name:find("menos") or name:find("vasto") or 
-                   name:find("arrancar") or name:find("hollow") and obj:FindFirstChild("Boss") then
-                    table.insert(bosses, obj)
-                end
-            end
-        end
-    end
-    
-    -- Também procurar em pastas específicas
-    local folders = {"Bosses", "Enemies", "Monsters", "NPCs"}
-    for _, folderName in ipairs(folders) do
-        local folder = Workspace:FindFirstChild(folderName)
-        if folder then
-            for _, obj in ipairs(folder:GetChildren()) do
-                if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
-                    local humanoid = obj.Humanoid
-                    if humanoid.Health > 0 then
-                        table.insert(bosses, obj)
-                    end
-                end
-            end
-        end
-    end
-    
-    return bosses
-end
+-- ===================== FUNÇÕES DE ATUALIZAÇÃO =====================
 
--- Atualizar lista de bosses
 function UpdateBossList()
-    -- Limpar lista atual
+    -- Limpar lista
     for _, child in ipairs(BossListFrame:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
         end
     end
     
-    local bosses = FindBosses()
+    local bosses = GetBosses()
     
     if #bosses == 0 then
         local NoBossLabel = Instance.new("TextLabel")
-        NoBossLabel.Size = UDim2.new(1, 0, 0, 25)
+        NoBossLabel.Size = UDim2.new(1, 0, 0, 30)
         NoBossLabel.BackgroundTransparency = 1
         NoBossLabel.Text = "Nenhum boss encontrado"
         NoBossLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
@@ -449,14 +654,10 @@ function UpdateBossList()
         NoBossLabel.Parent = BossListFrame
     else
         for _, boss in ipairs(bosses) do
-            local humanoid = boss:FindFirstChild("Humanoid")
-            local health = humanoid and math.floor(humanoid.Health) or 0
-            local maxHealth = humanoid and math.floor(humanoid.MaxHealth) or 0
-            
             local BossButton = Instance.new("TextButton")
-            BossButton.Size = UDim2.new(1, -4, 0, 25)
-            BossButton.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-            BossButton.Text = boss.Name .. " [❤️ " .. health .. "/" .. maxHealth .. "]"
+            BossButton.Size = UDim2.new(1, -4, 0, 28)
+            BossButton.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+            BossButton.Text = string.format("%s [❤️ %d/%d]", boss.Name, boss.Health, boss.MaxHealth)
             BossButton.TextColor3 = Color3.fromRGB(255, 255, 255)
             BossButton.TextSize = 10
             BossButton.Font = Enum.Font.Gotham
@@ -465,13 +666,13 @@ function UpdateBossList()
             BossButton.Parent = BossListFrame
             
             BossButton.MouseButton1Click:Connect(function()
-                Config.TargetBoss = boss
-                SelectedBossLabel.Text = "Selecionado: " .. boss.Name
+                Config.BossFarm.TargetBoss = boss
+                SelectedBossText.Text = "🎯 Selecionado: " .. boss.Name
                 
-                -- Destacar botão selecionado
+                -- Highlight visual
                 for _, btn in ipairs(BossListFrame:GetChildren()) do
                     if btn:IsA("TextButton") then
-                        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+                        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
                     end
                 end
                 BossButton.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
@@ -479,163 +680,10 @@ function UpdateBossList()
         end
     end
     
-    -- Atualizar tamanho do canvas
-    BossListFrame.CanvasSize = UDim2.new(0, 0, 0, #bosses * 27)
+    BossListFrame.CanvasSize = UDim2.new(0, 0, 0, #bosses * 30)
 end
 
--- Função para mover até o boss
-function MoveToTargetBoss()
-    if not Config.TargetBoss then
-        print("[Erro] Nenhum boss selecionado!")
-        return
-    end
-    
-    local character = Player.Character
-    if not character then
-        print("[Erro] Personagem não encontrado!")
-        return
-    end
-    
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then
-        print("[Erro] HumanoidRootPart não encontrada!")
-        return
-    end
-    
-    local bossRootPart = Config.TargetBoss:FindFirstChild("HumanoidRootPart")
-    if not bossRootPart then
-        print("[Erro] Boss não tem HumanoidRootPart!")
-        return
-    end
-    
-    -- Calcular posição baseada na configuração
-    local bossPosition = bossRootPart.Position
-    local offset = Vector3.new(0, 0, 0)
-    local distance = Config.AttackDistance
-    
-    if Config.CombatPosition == "Acima" then
-        offset = Vector3.new(0, distance, 0)
-    elseif Config.CombatPosition == "Abaixo" then
-        offset = Vector3.new(0, -distance, 0)
-    elseif Config.CombatPosition == "Atrás" then
-        local lookVector = bossRootPart.CFrame.LookVector
-        offset = -lookVector * distance
-    elseif Config.CombatPosition == "Frente" then
-        local lookVector = bossRootPart.CFrame.LookVector
-        offset = lookVector * distance
-    end
-    
-    local targetPosition = bossPosition + offset
-    
-    -- Movimento suave
-    local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local tween = TweenService:Create(humanoidRootPart, tweenInfo, {CFrame = CFrame.new(targetPosition)})
-    tween:Play()
-    
-    print("[Movimento] Indo para " .. Config.CombatPosition .. " do boss " .. Config.TargetBoss.Name)
-end
-
--- Função para criar/atualizar hitboxes visuais
-function UpdateHitboxVisuals()
-    local enemies = {}
-    
-    -- Encontrar todos os inimigos
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
-            local humanoid = obj.Humanoid
-            if humanoid.Health > 0 and obj ~= Character then
-                table.insert(enemies, obj)
-            end
-        end
-    end
-    
-    -- Criar/atualizar hitboxes
-    for _, enemy in ipairs(enemies) do
-        local humanoidRootPart = enemy:FindFirstChild("HumanoidRootPart")
-        if humanoidRootPart then
-            local hitbox = enemy:FindFirstChild("HitboxVisual")
-            
-            if Config.ShowHitboxes then
-                if not hitbox then
-                    -- Criar hitbox visual
-                    hitbox = Instance.new("Part")
-                    hitbox.Name = "HitboxVisual"
-                    hitbox.Size = Vector3.new(5, 6, 5)
-                    hitbox.Color = Config.HitboxColor
-                    hitbox.Transparency = Config.HitboxTransparency
-                    hitbox.Material = Enum.Material.Neon
-                    hitbox.Anchored = true
-                    hitbox.CanCollide = false
-                    hitbox.CanQuery = false
-                    hitbox.Parent = enemy
-                end
-                
-                -- Atualizar posição
-                hitbox.Position = humanoidRootPart.Position
-            else
-                -- Remover hitbox se existir
-                if hitbox then
-                    hitbox:Destroy()
-                end
-            end
-        end
-    end
-end
-
--- Sistema de Auto Defesa
-function AutoDefenseSystem()
-    if not Config.AutoDefense then return end
-    
-    local character = Player.Character
-    if not character then return end
-    
-    local humanoid = character:FindFirstChild("Humanoid")
-    if not humanoid then return end
-    
-    -- Verificar inimigos próximos
-    local enemies = {}
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj ~= character then
-            local enemyHumanoid = obj.Humanoid
-            if enemyHumanoid.Health > 0 then
-                local distance = (character:GetPivot().Position - obj:GetPivot().Position).Magnitude
-                if distance < 20 then -- Raio de detecção
-                    table.insert(enemies, obj)
-                end
-            end
-        end
-    end
-    
-    -- Tentar defender se houver ataque próximo
-    for _, enemy in ipairs(enemies) do
-        local enemyHumanoid = enemy:FindFirstChild("Humanoid")
-        if enemyHumanoid then
-            -- Verificar se inimigo está atacando
-            local animator = enemyHumanoid:FindFirstChild("Animator")
-            if animator then
-                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                    local animName = track.Animation.AnimationId:lower()
-                    if animName:find("attack") or animName:find("m1") or animName:find("hit") then
-                        -- Executar defesa
-                        pcall(function()
-                            local combatRemote = ReplicatedStorage:FindFirstChild("Remotes")
-                            if combatRemote then
-                                local combat = combatRemote:FindFirstChild("Combat")
-                                if combat then
-                                    combat:FireServer("Defend", true)
-                                    print("[Auto Defesa] Defesa executada!")
-                                end
-                            end
-                        end)
-                        break
-                    end
-                end
-            end
-        end
-    end
-end
-
--- Sistema de arraste da interface
+-- Sistema de arraste
 local dragging = false
 local dragStart = nil
 local startPos = nil
@@ -648,7 +696,7 @@ TitleBar.InputBegan:Connect(function(input)
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
+Services.UserInputService.InputChanged:Connect(function(input)
     if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
         MainFrame.Position = UDim2.new(
@@ -660,50 +708,43 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
+Services.UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = false
     end
 end)
 
--- Fechar interface
 CloseButton.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
--- Loop principal de atualização
+-- Loop principal otimizado
+Services.RunService.Heartbeat:Connect(function()
+    pcall(function()
+        AutoParry()
+        UpdateHitboxESP()
+        AutoFarmBoss()
+    end)
+end)
+
+-- Atualização menos frequente para a UI
 spawn(function()
-    while wait(Config.UpdateInterval) do
+    while wait(1) do
         pcall(function()
-            -- Atualizar lista de bosses
             UpdateBossList()
-            
-            -- Atualizar hitboxes visuais
-            UpdateHitboxVisuals()
-            
-            -- Executar auto defesa
-            AutoDefenseSystem()
         end)
     end
 end)
 
--- Atualizar quando personagem mudar
-Player.CharacterAdded:Connect(function(newCharacter)
-    Character = newCharacter
-    print("[Sistema] Novo personagem detectado")
+-- Reconectar quando personagem mudar
+Player.CharacterAdded:Connect(function(character)
+    wait(1) -- Aguardar carregar
+    Config.AutoParry.LastParry = 0
+    print("[Sistema] Novo personagem conectado")
 end)
 
-print("✅ VV Ultimatum UI carregada com sucesso!")
-print("📋 Comandos disponíveis:")
-print("   - Auto Defesa: Proteção automática contra M1")
-print("   - Hitbox Visual: Mostra área de ataque dos inimigos")
-print("   - Gerenciador de Bosses: Lista bosses do servidor")
-print("   - Sistema de Combate: Teleporte até bosses")
-print("   - Posicionamento: Escolha onde ficar na luta")
+print("✅ VV Ultimatum Pro carregado!")
+print("🎯 Procure pelo Giant Dragonfly na lista de bosses")
+print("⚔️ Selecione o boss e ative o Auto Farm!")
 
 end)
-
--- Tratamento de erro
-if not success then
-    warn("❌ Erro ao carregar script: " .. tostring(errorMsg))
-end
