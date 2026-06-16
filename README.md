@@ -1,525 +1,577 @@
 --[[
-    Movement GUI para "Roube um Brainrot"
-    Noclip + Speed Hack - Versão Otimizada
-]]
-
--- Aguarda o jogo carregar
-repeat task.wait() until game:IsLoaded()
+	Advanced God Mode System with Modern UI
+	Created for Roblox - Universal Compatibility
+	Features: Smooth animations, responsive design, expandable framework
+--]]
 
 -- Services
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-
--- Jogador Local
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then return end
 
--- Variáveis
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
-local RootPart = Character:WaitForChild("HumanoidRootPart")
+-- Constants
+local TWEEN_SPEED = 0.3
+local CORNER_RADIUS = UDim.new(0, 8)
+local PADDING = 12
 
--- Configurações
-local Settings = {
-    Noclip = false,
-    SpeedBoost = false,
-    SpeedValue = 16,
-    DefaultSpeed = 16
+-- Module Table
+local GodModeUI = {}
+GodModeUI.Enabled = false
+GodModeUI.Connections = {}
+
+-- Create ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "GodModeSystem"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Only create if it doesn't exist
+if LocalPlayer:FindFirstChild("PlayerGui") then
+	local existingGui = LocalPlayer.PlayerGui:FindFirstChild("GodModeSystem")
+	if existingGui then
+		existingGui:Destroy()
+	end
+	ScreenGui.Parent = LocalPlayer.PlayerGui
+end
+
+-- Colors Configuration (Easy to customize)
+local Colors = {
+	Background = Color3.fromRGB(25, 25, 35),
+	Container = Color3.fromRGB(35, 35, 50),
+	Accent = Color3.fromRGB(100, 150, 255),
+	AccentHover = Color3.fromRGB(120, 170, 255),
+	AccentActive = Color3.fromRGB(0, 255, 100),
+	Text = Color3.fromRGB(255, 255, 255),
+	TextSecondary = Color3.fromRGB(180, 180, 190),
+	Border = Color3.fromRGB(60, 60, 80),
+	Shadow = Color3.fromRGB(0, 0, 0),
+	Disabled = Color3.fromRGB(80, 80, 90),
+	Success = Color3.fromRGB(0, 255, 100),
+	Warning = Color3.fromRGB(255, 200, 0),
+	Danger = Color3.fromRGB(255, 80, 80),
 }
 
--- Conexões
-local NoclipConnection = nil
+-- Main Container
+local MainContainer = Instance.new("Frame")
+MainContainer.Name = "MainContainer"
+MainContainer.Size = UDim2.new(0, 280, 0, 200)
+MainContainer.Position = UDim2.new(0, 20, 0.5, -100)
+MainContainer.BackgroundColor3 = Colors.Container
+MainContainer.BackgroundTransparency = 0.1
+MainContainer.BorderSizePixel = 0
+MainContainer.Active = true
+MainContainer.Draggable = true
+MainContainer.Parent = ScreenGui
 
--- Criar GUI
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MovementGUI"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = game:GetService("CoreGui")
+-- Add corner radius
+local ContainerCorner = Instance.new("UICorner")
+ContainerCorner.CornerRadius = CORNER_RADIUS
+ContainerCorner.Parent = MainContainer
 
--- Frame Principal
-local Main = Instance.new("Frame")
-Main.Name = "Main"
-Main.Parent = ScreenGui
-Main.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-Main.BorderSizePixel = 0
-Main.Position = UDim2.new(0.5, -140, 0.3, 0)
-Main.Size = UDim2.new(0, 280, 0, 310)
-Main.Active = true
+-- Add shadow effect
+local Shadow = Instance.new("ImageLabel")
+Shadow.Name = "Shadow"
+Shadow.Size = UDim2.new(1, 20, 1, 20)
+Shadow.Position = UDim2.new(0, -10, 0, -10)
+Shadow.BackgroundTransparency = 1
+Shadow.Image = "rbxassetid://6014261993"
+Shadow.ImageColor3 = Colors.Shadow
+Shadow.ImageTransparency = 0.7
+Shadow.ScaleType = Enum.ScaleType.Slice
+Shadow.SliceCenter = Rect.new(49, 49, 49, 49)
+Shadow.ZIndex = 0
+Shadow.Parent = MainContainer
 
--- Cantos arredondados
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 8)
-MainCorner.Parent = Main
-
--- Barra de Título
+-- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Name = "TitleBar"
-TitleBar.Parent = Main
-TitleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
+TitleBar.BackgroundColor3 = Colors.Background
+TitleBar.BackgroundTransparency = 0.5
 TitleBar.BorderSizePixel = 0
-TitleBar.Size = UDim2.new(1, 0, 0, 35)
-TitleBar.Active = true
+TitleBar.Parent = MainContainer
 
 local TitleCorner = Instance.new("UICorner")
-TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.CornerRadius = CORNER_RADIUS
 TitleCorner.Parent = TitleBar
 
-local TitlePatch = Instance.new("Frame")
-TitlePatch.Parent = TitleBar
-TitlePatch.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-TitlePatch.BorderSizePixel = 0
-TitlePatch.Position = UDim2.new(0, 0, 0.5, 0)
-TitlePatch.Size = UDim2.new(1, 0, 0.5, 0)
+-- Title Text
+local TitleText = Instance.new("TextLabel")
+TitleText.Name = "TitleText"
+TitleText.Size = UDim2.new(1, -PADDING * 2, 1, 0)
+TitleText.Position = UDim2.new(0, PADDING, 0, 0)
+TitleText.BackgroundTransparency = 1
+TitleText.Text = "🛡️ God Mode System"
+TitleText.TextColor3 = Colors.Text
+TitleText.TextSize = 16
+TitleText.Font = Enum.Font.GothamBold
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+TitleText.Parent = TitleBar
 
--- Título
-local Title = Instance.new("TextLabel")
-Title.Parent = TitleBar
-Title.BackgroundTransparency = 1
-Title.Position = UDim2.new(0, 12, 0, 0)
-Title.Size = UDim2.new(0.6, 0, 1, 0)
-Title.Font = Enum.Font.GothamBold
-Title.Text = "Movement GUI"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 15
-Title.TextXAlignment = Enum.TextXAlignment.Left
+-- Close Button
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.Position = UDim2.new(1, -30, 0, 5)
+CloseButton.BackgroundTransparency = 1
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Colors.TextSecondary
+CloseButton.TextSize = 16
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Parent = TitleBar
 
--- Botão Minimizar
-local MinimizeBtn = Instance.new("TextButton")
-MinimizeBtn.Name = "MinimizeBtn"
-MinimizeBtn.Parent = TitleBar
-MinimizeBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
-MinimizeBtn.BorderSizePixel = 0
-MinimizeBtn.Position = UDim2.new(0.75, 0, 0.5, -10)
-MinimizeBtn.Size = UDim2.new(0, 22, 0, 22)
-MinimizeBtn.Text = "—"
-MinimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinimizeBtn.TextSize = 14
-MinimizeBtn.Font = Enum.Font.GothamBold
+-- Content Area
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Size = UDim2.new(1, 0, 1, -50)
+ContentFrame.Position = UDim2.new(0, 0, 0, 50)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainContainer
 
-local MinCorner = Instance.new("UICorner")
-MinCorner.CornerRadius = UDim.new(0, 5)
-MinCorner.Parent = MinimizeBtn
+-- UIListLayout for organization
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Parent = ContentFrame
 
--- Botão Fechar
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Name = "CloseBtn"
-CloseBtn.Parent = TitleBar
-CloseBtn.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
-CloseBtn.BorderSizePixel = 0
-CloseBtn.Position = UDim2.new(0.88, 0, 0.5, -10)
-CloseBtn.Size = UDim2.new(0, 22, 0, 22)
-CloseBtn.Text = "✕"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.TextSize = 12
-CloseBtn.Font = Enum.Font.GothamBold
+-- Padding for content
+local ContentPadding = Instance.new("UIPadding")
+ContentPadding.PaddingLeft = UDim.new(0, PADDING)
+ContentPadding.PaddingRight = UDim.new(0, PADDING)
+ContentPadding.PaddingTop = UDim.new(0, 8)
+ContentPadding.Parent = ContentFrame
 
-local CloseCorner = Instance.new("UICorner")
-CloseCorner.CornerRadius = UDim.new(0, 5)
-CloseCorner.Parent = CloseBtn
-
--- Conteúdo Principal
-local Content = Instance.new("Frame")
-Content.Name = "Content"
-Content.Parent = Main
-Content.BackgroundTransparency = 1
-Content.BorderSizePixel = 0
-Content.Position = UDim2.new(0, 0, 0, 40)
-Content.Size = UDim2.new(1, 0, 1, -45)
-
--- ===== SEÇÃO NOCLIP =====
-local NoclipFrame = Instance.new("Frame")
-NoclipFrame.Name = "NoclipFrame"
-NoclipFrame.Parent = Content
-NoclipFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 43)
-NoclipFrame.BorderSizePixel = 0
-NoclipFrame.Position = UDim2.new(0, 10, 0, 5)
-NoclipFrame.Size = UDim2.new(1, -20, 0, 85)
-
-local NoclipCorner = Instance.new("UICorner")
-NoclipCorner.CornerRadius = UDim.new(0, 6)
-NoclipCorner.Parent = NoclipFrame
-
-local NoclipHeader = Instance.new("TextLabel")
-NoclipHeader.Parent = NoclipFrame
-NoclipHeader.BackgroundTransparency = 1
-NoclipHeader.Position = UDim2.new(0, 12, 0, 8)
-NoclipHeader.Size = UDim2.new(0.7, 0, 0, 20)
-NoclipHeader.Font = Enum.Font.GothamBold
-NoclipHeader.Text = "🚀 Noclip"
-NoclipHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
-NoclipHeader.TextSize = 14
-NoclipHeader.TextXAlignment = Enum.TextXAlignment.Left
-
-local NoclipStatus = Instance.new("TextLabel")
-NoclipStatus.Name = "NoclipStatus"
-NoclipStatus.Parent = NoclipFrame
-NoclipStatus.BackgroundTransparency = 1
-NoclipStatus.Position = UDim2.new(0, 12, 0, 30)
-NoclipStatus.Size = UDim2.new(0.5, 0, 0, 16)
-NoclipStatus.Font = Enum.Font.Gotham
-NoclipStatus.Text = "Atravessar paredes"
-NoclipStatus.TextColor3 = Color3.fromRGB(160, 160, 160)
-NoclipStatus.TextSize = 11
-NoclipStatus.TextXAlignment = Enum.TextXAlignment.Left
-
-local NoclipBtn = Instance.new("TextButton")
-NoclipBtn.Name = "NoclipBtn"
-NoclipBtn.Parent = NoclipFrame
-NoclipBtn.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
-NoclipBtn.BorderSizePixel = 0
-NoclipBtn.Position = UDim2.new(0.6, 0, 0, 12)
-NoclipBtn.Size = UDim2.new(0, 70, 0, 30)
-NoclipBtn.Text = "OFF"
-NoclipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-NoclipBtn.TextSize = 13
-NoclipBtn.Font = Enum.Font.GothamBold
-NoclipBtn.AutoButtonColor = false
-
-local NoclipBtnCorner = Instance.new("UICorner")
-NoclipBtnCorner.CornerRadius = UDim.new(0, 15)
-NoclipBtnCorner.Parent = NoclipBtn
-
-local NoclipInfo = Instance.new("TextLabel")
-NoclipInfo.Parent = NoclipFrame
-NoclipInfo.BackgroundTransparency = 1
-NoclipInfo.Position = UDim2.new(0, 12, 0, 55)
-NoclipInfo.Size = UDim2.new(1, -24, 0, 18)
-NoclipInfo.Font = Enum.Font.Gotham
-NoclipInfo.Text = "Status: Desativado"
-NoclipInfo.TextColor3 = Color3.fromRGB(255, 100, 100)
-NoclipInfo.TextSize = 11
-NoclipInfo.TextXAlignment = Enum.TextXAlignment.Left
-
--- ===== SEÇÃO SPEED =====
-local SpeedFrame = Instance.new("Frame")
-SpeedFrame.Name = "SpeedFrame"
-SpeedFrame.Parent = Content
-SpeedFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 43)
-SpeedFrame.BorderSizePixel = 0
-SpeedFrame.Position = UDim2.new(0, 10, 0, 100)
-SpeedFrame.Size = UDim2.new(1, -20, 0, 160)
-
-local SpeedCorner = Instance.new("UICorner")
-SpeedCorner.CornerRadius = UDim.new(0, 6)
-SpeedCorner.Parent = SpeedFrame
-
-local SpeedHeader = Instance.new("TextLabel")
-SpeedHeader.Parent = SpeedFrame
-SpeedHeader.BackgroundTransparency = 1
-SpeedHeader.Position = UDim2.new(0, 12, 0, 8)
-SpeedHeader.Size = UDim2.new(0.7, 0, 0, 20)
-SpeedHeader.Font = Enum.Font.GothamBold
-SpeedHeader.Text = "⚡ Speed Hack"
-SpeedHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedHeader.TextSize = 14
-SpeedHeader.TextXAlignment = Enum.TextXAlignment.Left
-
--- Slider Background
-local SliderBg = Instance.new("Frame")
-SliderBg.Name = "SliderBg"
-SliderBg.Parent = SpeedFrame
-SliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
-SliderBg.BorderSizePixel = 0
-SliderBg.Position = UDim2.new(0, 12, 0, 40)
-SliderBg.Size = UDim2.new(0.6, 0, 0, 22)
-SliderBg.Active = true
-
-local SliderBgCorner = Instance.new("UICorner")
-SliderBgCorner.CornerRadius = UDim.new(0, 11)
-SliderBgCorner.Parent = SliderBg
-
--- Slider Fill
-local SliderFill = Instance.new("Frame")
-SliderFill.Name = "SliderFill"
-SliderFill.Parent = SliderBg
-SliderFill.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-SliderFill.BorderSizePixel = 0
-SliderFill.Size = UDim2.new(0.1, 0, 1, 0)
-
-local SliderFillCorner = Instance.new("UICorner")
-SliderFillCorner.CornerRadius = UDim.new(0, 11)
-SliderFillCorner.Parent = SliderFill
-
--- Valor do Slider
-local SpeedValue = Instance.new("TextLabel")
-SpeedValue.Name = "SpeedValue"
-SpeedValue.Parent = SpeedFrame
-SpeedValue.BackgroundTransparency = 1
-SpeedValue.Position = UDim2.new(0.68, 0, 0, 40)
-SpeedValue.Size = UDim2.new(0, 45, 0, 22)
-SpeedValue.Font = Enum.Font.GothamBold
-SpeedValue.Text = "16"
-SpeedValue.TextColor3 = Color3.fromRGB(0, 150, 255)
-SpeedValue.TextSize = 15
-SpeedValue.TextXAlignment = Enum.TextXAlignment.Center
-
--- Labels min/max
-local MinSpeed = Instance.new("TextLabel")
-MinSpeed.Parent = SpeedFrame
-MinSpeed.BackgroundTransparency = 1
-MinSpeed.Position = UDim2.new(0, 12, 0, 62)
-MinSpeed.Size = UDim2.new(0, 20, 0, 12)
-MinSpeed.Font = Enum.Font.Gotham
-MinSpeed.Text = "1"
-MinSpeed.TextColor3 = Color3.fromRGB(140, 140, 140)
-MinSpeed.TextSize = 9
-
-local MaxSpeed = Instance.new("TextLabel")
-MaxSpeed.Parent = SpeedFrame
-MaxSpeed.BackgroundTransparency = 1
-MaxSpeed.Position = UDim2.new(0.58, 0, 0, 62)
-MaxSpeed.Size = UDim2.new(0, 30, 0, 12)
-MaxSpeed.Font = Enum.Font.Gotham
-MaxSpeed.Text = "200"
-MaxSpeed.TextColor3 = Color3.fromRGB(140, 140, 140)
-MaxSpeed.TextSize = 9
-
--- Botão Speed
-local SpeedBtn = Instance.new("TextButton")
-SpeedBtn.Name = "SpeedBtn"
-SpeedBtn.Parent = SpeedFrame
-SpeedBtn.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
-SpeedBtn.BorderSizePixel = 0
-SpeedBtn.Position = UDim2.new(0, 12, 0, 85)
-SpeedBtn.Size = UDim2.new(0, 70, 0, 30)
-SpeedBtn.Text = "OFF"
-SpeedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedBtn.TextSize = 13
-SpeedBtn.Font = Enum.Font.GothamBold
-SpeedBtn.AutoButtonColor = false
-
-local SpeedBtnCorner = Instance.new("UICorner")
-SpeedBtnCorner.CornerRadius = UDim.new(0, 15)
-SpeedBtnCorner.Parent = SpeedBtn
-
-local SpeedBtnLabel = Instance.new("TextLabel")
-SpeedBtnLabel.Parent = SpeedFrame
-SpeedBtnLabel.BackgroundTransparency = 1
-SpeedBtnLabel.Position = UDim2.new(0, 90, 0, 85)
-SpeedBtnLabel.Size = UDim2.new(0.5, 0, 0, 30)
-SpeedBtnLabel.Font = Enum.Font.Gotham
-SpeedBtnLabel.Text = "Ativar Speed Boost"
-SpeedBtnLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
-SpeedBtnLabel.TextSize = 12
-SpeedBtnLabel.TextXAlignment = Enum.TextXAlignment.Left
-
--- Velocidade Atual
-local CurrentSpeed = Instance.new("TextLabel")
-CurrentSpeed.Name = "CurrentSpeed"
-CurrentSpeed.Parent = SpeedFrame
-CurrentSpeed.BackgroundTransparency = 1
-CurrentSpeed.Position = UDim2.new(0, 12, 0, 128)
-CurrentSpeed.Size = UDim2.new(1, -24, 0, 18)
-CurrentSpeed.Font = Enum.Font.GothamBold
-CurrentSpeed.Text = "🏃 Velocidade: 16"
-CurrentSpeed.TextColor3 = Color3.fromRGB(200, 200, 200)
-CurrentSpeed.TextSize = 12
-CurrentSpeed.TextXAlignment = Enum.TextXAlignment.Left
-
--- ===== FUNÇÕES =====
-local function UpdateNoclipUI()
-    if Settings.Noclip then
-        NoclipBtn.BackgroundColor3 = Color3.fromRGB(40, 200, 40)
-        NoclipBtn.Text = "ON"
-        NoclipInfo.Text = "✅ Status: Ativado"
-        NoclipInfo.TextColor3 = Color3.fromRGB(100, 255, 100)
-    else
-        NoclipBtn.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
-        NoclipBtn.Text = "OFF"
-        NoclipInfo.Text = "❌ Status: Desativado"
-        NoclipInfo.TextColor3 = Color3.fromRGB(255, 100, 100)
-    end
+-- Function to create toggle buttons
+local function CreateToggleButton(name, description, icon, order)
+	local buttonFrame = Instance.new("Frame")
+	buttonFrame.Name = name .. "Toggle"
+	buttonFrame.Size = UDim2.new(1, 0, 0, 50)
+	buttonFrame.BackgroundColor3 = Colors.Background
+	buttonFrame.BackgroundTransparency = 0.7
+	buttonFrame.BorderSizePixel = 0
+	buttonFrame.LayoutOrder = order
+	
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0, 6)
+	buttonCorner.Parent = buttonFrame
+	
+	-- Icon
+	local iconLabel = Instance.new("TextLabel")
+	iconLabel.Name = "Icon"
+	iconLabel.Size = UDim2.new(0, 30, 0, 30)
+	iconLabel.Position = UDim2.new(0, 10, 0.5, -15)
+	iconLabel.BackgroundTransparency = 1
+	iconLabel.Text = icon
+	iconLabel.TextSize = 20
+	iconLabel.Parent = buttonFrame
+	
+	-- Name
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "Name"
+	nameLabel.Size = UDim2.new(1, -120, 0, 20)
+	nameLabel.Position = UDim2.new(0, 50, 0, 6)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = name
+	nameLabel.TextColor3 = Colors.Text
+	nameLabel.TextSize = 14
+	nameLabel.Font = Enum.Font.GothamSemibold
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = buttonFrame
+	
+	-- Description
+	local descLabel = Instance.new("TextLabel")
+	descLabel.Name = "Description"
+	descLabel.Size = UDim2.new(1, -120, 0, 16)
+	descLabel.Position = UDim2.new(0, 50, 0, 26)
+	descLabel.BackgroundTransparency = 1
+	descLabel.Text = description
+	descLabel.TextColor3 = Colors.TextSecondary
+	descLabel.TextSize = 11
+	descLabel.Font = Enum.Font.Gotham
+	descLabel.TextXAlignment = Enum.TextXAlignment.Left
+	descLabel.Parent = buttonFrame
+	
+	-- Toggle Switch
+	local switchFrame = Instance.new("Frame")
+	switchFrame.Name = "SwitchFrame"
+	switchFrame.Size = UDim2.new(0, 44, 0, 24)
+	switchFrame.Position = UDim2.new(1, -54, 0.5, -12)
+	switchFrame.BackgroundColor3 = Colors.Disabled
+	switchFrame.BorderSizePixel = 0
+	
+	local switchCorner = Instance.new("UICorner")
+	switchCorner.CornerRadius = UDim.new(1, 0)
+	switchCorner.Parent = switchFrame
+	
+	local switchKnob = Instance.new("Frame")
+	switchKnob.Name = "Knob"
+	switchKnob.Size = UDim2.new(0, 18, 0, 18)
+	switchKnob.Position = UDim2.new(0, 3, 0.5, -9)
+	switchKnob.BackgroundColor3 = Colors.Text
+	switchKnob.BorderSizePixel = 0
+	
+	local knobCorner = Instance.new("UICorner")
+	knobCorner.CornerRadius = UDim.new(1, 0)
+	knobCorner.Parent = switchKnob
+	
+	switchKnob.Parent = switchFrame
+	switchFrame.Parent = buttonFrame
+	
+	-- Status indicator
+	local statusIndicator = Instance.new("Frame")
+	statusIndicator.Name = "StatusIndicator"
+	statusIndicator.Size = UDim2.new(0, 6, 0, 6)
+	statusIndicator.Position = UDim2.new(0, 8, 0.5, -3)
+	statusIndicator.BackgroundColor3 = Colors.Danger
+	statusIndicator.BorderSizePixel = 0
+	
+	local indicatorCorner = Instance.new("UICorner")
+	indicatorCorner.CornerRadius = UDim.new(1, 0)
+	indicatorCorner.Parent = statusIndicator
+	
+	statusIndicator.Visible = false
+	statusIndicator.Parent = buttonFrame
+	
+	-- Toggle Function
+	local isEnabled = false
+	local toggleConnection
+	
+	local function updateToggle(state)
+		isEnabled = state
+		if state then
+			switchFrame.BackgroundColor3 = Colors.AccentActive
+			switchKnob:TweenPosition(
+				UDim2.new(1, -21, 0.5, -9),
+				"Out",
+				"Quad",
+				TWEEN_SPEED,
+				true
+			)
+			statusIndicator.BackgroundColor3 = Colors.Success
+			statusIndicator.Visible = true
+		else
+			switchFrame.BackgroundColor3 = Colors.Disabled
+			switchKnob:TweenPosition(
+				UDim2.new(0, 3, 0.5, -9),
+				"Out",
+				"Quad",
+				TWEEN_SPEED,
+				true
+			)
+			statusIndicator.BackgroundColor3 = Colors.Danger
+			statusIndicator.Visible = true
+		end
+	end
+	
+	-- Hover effects
+	buttonFrame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			isEnabled = not isEnabled
+			updateToggle(isEnabled)
+			return isEnabled
+		end
+	end)
+	
+	buttonFrame.MouseEnter:Connect(function()
+		buttonFrame.BackgroundTransparency = 0.5
+	end)
+	
+	buttonFrame.MouseLeave:Connect(function()
+		buttonFrame.BackgroundTransparency = 0.7
+	end)
+	
+	return {
+		Frame = buttonFrame,
+		Update = updateToggle,
+		GetState = function() return isEnabled end,
+	}
 end
 
-local function UpdateSpeedUI()
-    if Settings.SpeedBoost then
-        SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 200, 40)
-        SpeedBtn.Text = "ON"
-    else
-        SpeedBtn.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
-        SpeedBtn.Text = "OFF"
-    end
+-- Create God Mode Toggle
+local godModeToggle = CreateToggleButton(
+	"God Mode",
+	"Torna o jogador invencível",
+	"🛡️",
+	1
+)
+godModeToggle.Frame.Parent = ContentFrame
+
+-- Create Auto Heal Toggle (Example expandable feature)
+local autoHealToggle = CreateToggleButton(
+	"Auto Heal",
+	"Regenera vida automaticamente",
+	"💚",
+	2
+)
+autoHealToggle.Frame.Parent = ContentFrame
+
+-- Status Bar
+local statusBar = Instance.new("Frame")
+statusBar.Name = "StatusBar"
+statusBar.Size = UDim2.new(1, 0, 0, 2)
+statusBar.Position = UDim2.new(0, 0, 0, 48)
+statusBar.BackgroundColor3 = Colors.AccentActive
+statusBar.BackgroundTransparency = 0.5
+statusBar.BorderSizePixel = 0
+statusBar.Visible = false
+statusBar.Parent = ContentFrame
+
+local statusBarCorner = Instance.new("UICorner")
+statusBarCorner.CornerRadius = UDim.new(1, 0)
+statusBarCorner.Parent = statusBar
+
+-- God Mode Core System
+local characterConnections = {}
+
+local function protectCharacter(character)
+	if not character then return end
+	
+	-- Clear existing connections for this character
+	if characterConnections[character] then
+		for _, conn in ipairs(characterConnections[character]) do
+			conn:Disconnect()
+		end
+	end
+	
+	characterConnections[character] = {}
+	
+	-- Find Humanoid
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		-- Store original max health
+		local originalMaxHealth = humanoid.MaxHealth
+		
+		-- Set max health to infinite
+		humanoid.MaxHealth = math.huge
+		humanoid.Health = math.huge
+		
+		-- Connection to maintain health
+		local healthConnection = humanoid.HealthChanged:Connect(function()
+			if GodModeUI.Enabled and humanoid.Health < math.huge then
+				humanoid.Health = math.huge
+			end
+		end)
+		
+		table.insert(characterConnections[character], healthConnection)
+		
+		-- Connection for when god mode is disabled
+		local disableConnection
+		disableConnection = GodModeUI.OnDisabled:Connect(function()
+			if humanoid and humanoid.Parent then
+				humanoid.MaxHealth = originalMaxHealth
+				humanoid.Health = originalMaxHealth
+			end
+			disableConnection:Disconnect()
+		end)
+		
+		table.insert(characterConnections[character], disableConnection)
+	end
+	
+	-- Protect against damage from all sources
+	local descendantAddedConnection
+	descendantAddedConnection = character.DescendantAdded:Connect(function(descendant)
+		if GodModeUI.Enabled and descendant:IsA("Humanoid") then
+			descendant.MaxHealth = math.huge
+			descendant.Health = math.huge
+		end
+	end)
+	
+	table.insert(characterConnections[character], descendantAddedConnection)
 end
 
-local function UpdateSlider()
-    local percent = (Settings.SpeedValue - 1) / (200 - 1)
-    SliderFill.Size = UDim2.new(percent, 0, 1, 0)
-    SpeedValue.Text = tostring(math.floor(Settings.SpeedValue))
+local function unprotectCharacter(character)
+	if not character then return end
+	
+	-- Find Humanoid
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.MaxHealth = 100
+		humanoid.Health = 100
+	end
+	
+	-- Clear connections
+	if characterConnections[character] then
+		for _, conn in ipairs(characterConnections[character]) do
+			conn:Disconnect()
+		end
+		characterConnections[character] = nil
+	end
 end
 
-local function ApplySpeed()
-    if Character and Humanoid and Humanoid.Parent then
-        if Settings.SpeedBoost then
-            Humanoid.WalkSpeed = Settings.SpeedValue
-            CurrentSpeed.Text = "🏃 Velocidade: " .. tostring(math.floor(Settings.SpeedValue)) .. " (Boost)"
-        else
-            Humanoid.WalkSpeed = Settings.DefaultSpeed
-            CurrentSpeed.Text = "🏃 Velocidade: " .. tostring(Settings.DefaultSpeed)
-        end
-    end
+-- Signal-like events for God Mode state changes
+GodModeUI.OnEnabled = Instance.new("BindableEvent")
+GodModeUI.OnDisabled = Instance.new("BindableEvent")
+
+-- Enable/Disable functions
+function GodModeUI.Enable()
+	if GodModeUI.Enabled then return end
+	GodModeUI.Enabled = true
+	
+	-- Protect current character
+	if LocalPlayer.Character then
+		protectCharacter(LocalPlayer.Character)
+	end
+	
+	-- Update UI
+	godModeToggle.Update(true)
+	statusBar.Visible = true
+	
+	-- Animate status bar
+	TweenService:Create(
+		statusBar,
+		TweenInfo.new(1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1),
+		{BackgroundTransparency = 0}
+	):Play()
+	
+	GodModeUI.OnEnabled:Fire()
+	
+	print("🛡️ God Mode Ativado")
 end
 
--- Função principal do Noclip
-local function ToggleNoclip()
-    Settings.Noclip = not Settings.Noclip
-    UpdateNoclipUI()
-    
-    if NoclipConnection then
-        NoclipConnection:Disconnect()
-        NoclipConnection = nil
-    end
-    
-    if Settings.Noclip then
-        NoclipConnection = RunService.Stepped:Connect(function()
-            local char = LocalPlayer.Character
-            if char and Settings.Noclip then
-                for _, v in pairs(char:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.CanCollide = false
-                    end
-                end
-            end
-        end)
-    else
-        local char = LocalPlayer.Character
-        if char then
-            for _, v in pairs(char:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    v.CanCollide = true
-                end
-            end
-        end
-    end
+function GodModeUI.Disable()
+	if not GodModeUI.Enabled then return end
+	GodModeUI.Enabled = false
+	
+	-- Unprotect current character
+	if LocalPlayer.Character then
+		unprotectCharacter(LocalPlayer.Character)
+	end
+	
+	-- Update UI
+	godModeToggle.Update(false)
+	statusBar.Visible = false
+	
+	GodModeUI.OnDisabled:Fire()
+	
+	print("⚔️ God Mode Desativado")
 end
 
-local function ToggleSpeed()
-    Settings.SpeedBoost = not Settings.SpeedBoost
-    UpdateSpeedUI()
-    ApplySpeed()
+-- Character handling
+local function onCharacterAdded(character)
+	if GodModeUI.Enabled then
+		protectCharacter(character)
+	end
 end
 
--- Eventos de clique
-NoclipBtn.MouseButton1Click:Connect(ToggleNoclip)
-SpeedBtn.MouseButton1Click:Connect(ToggleSpeed)
-
--- Eventos do Slider
-local function UpdateSliderPosition(input)
-    local pos = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
-    Settings.SpeedValue = 1 + (pos * (200 - 1))
-    UpdateSlider()
-    ApplySpeed()
+local function onCharacterRemoving(character)
+	unprotectCharacter(character)
 end
 
-SliderBg.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
-       input.UserInputType == Enum.UserInputType.Touch then
-        UpdateSliderPosition(input)
-        
-        local connection
-        connection = input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.Change then
-                UpdateSliderPosition(input)
-            elseif input.UserInputState == Enum.UserInputState.End then
-                connection:Disconnect()
-            end
-        end)
-    end
+-- Connect character events
+if LocalPlayer.Character then
+	onCharacterAdded(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+LocalPlayer.CharacterRemoving:Connect(onCharacterRemoving)
+
+-- Toggle button click handler
+godModeToggle.Frame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if GodModeUI.Enabled then
+			GodModeUI.Disable()
+		else
+			GodModeUI.Enable()
+		end
+	end
 end)
 
--- Arrastar janela
-local dragging = false
-local dragStart = Vector2.new()
-local startPos = UDim2.new()
+-- Auto Heal System (Example expandable feature)
+local autoHealEnabled = false
+local healConnection
 
-TitleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
-       input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = Main.Position
-        
-        local connection
-        connection = input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-                connection:Disconnect()
-            end
-        end)
-    end
+autoHealToggle.Frame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		autoHealEnabled = not autoHealEnabled
+		autoHealToggle.Update(autoHealEnabled)
+		
+		if autoHealEnabled then
+			healConnection = RunService.Heartbeat:Connect(function()
+				if LocalPlayer.Character then
+					local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+					if humanoid and humanoid.Health < humanoid.MaxHealth then
+						humanoid.Health = math.min(humanoid.Health + 2, humanoid.MaxHealth)
+					end
+				end
+			end)
+			print("💚 Auto Heal Ativado")
+		else
+			if healConnection then
+				healConnection:Disconnect()
+			end
+			print("💚 Auto Heal Desativado")
+		end
+	end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or 
-                    input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        Main.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
+-- Close button functionality
+CloseButton.MouseButton1Click:Connect(function()
+	ScreenGui.Enabled = false
+	print("📱 UI Minimizada - Use o comando /godmode para reabrir")
 end)
 
--- Minimizar
-local minimized = false
-MinimizeBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    if minimized then
-        Content.Visible = false
-        Main.Size = UDim2.new(0, 280, 0, 35)
-    else
-        Content.Visible = true
-        Main.Size = UDim2.new(0, 280, 0, 310)
-    end
+-- Keyboard shortcut (Press RightShift to toggle)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		if GodModeUI.Enabled then
+			GodModeUI.Disable()
+		else
+			GodModeUI.Enable()
+		end
+	end
 end)
 
--- Fechar
-CloseBtn.MouseButton1Click:Connect(function()
-    if NoclipConnection then
-        NoclipConnection:Disconnect()
-    end
-    
-    -- Restaurar colisões
-    if Character then
-        for _, v in pairs(Character:GetDescendants()) do
-            if v:IsA("BasePart") then
-                v.CanCollide = true
-            end
-        end
-    end
-    
-    ScreenGui:Destroy()
+-- Toggle UI visibility with LeftControl
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.LeftControl then
+		ScreenGui.Enabled = not ScreenGui.Enabled
+	end
 end)
 
--- Respawn Handler
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    Character = newChar
-    Humanoid = Character:WaitForChild("Humanoid")
-    RootPart = Character:WaitForChild("HumanoidRootPart")
-    
-    wait(0.5)
-    
-    -- Reaplicar efeitos
-    if Settings.Noclip then
-        ToggleNoclip()
-        ToggleNoclip()
-    end
-    
-    if Settings.SpeedBoost then
-        ApplySpeed()
-    end
+-- Command bar support
+LocalPlayer.Chatted:Connect(function(message)
+	if message:lower() == "/godmode" then
+		ScreenGui.Enabled = true
+		if GodModeUI.Enabled then
+			GodModeUI.Disable()
+		else
+			GodModeUI.Enable()
+		end
+	elseif message:lower() == "/godmode ui" then
+		ScreenGui.Enabled = not ScreenGui.Enabled
+	end
 end)
 
--- Inicialização
-UpdateNoclipUI()
-UpdateSpeedUI()
-UpdateSlider()
-CurrentSpeed.Text = "🏃 Velocidade: " .. tostring(Settings.DefaultSpeed)
+-- Initial animation
+MainContainer.Size = UDim2.new(0, 0, 0, 200)
+MainContainer.Position = UDim2.new(0, 20, 0.5, -100)
+TweenService:Create(
+	MainContainer,
+	TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	{Size = UDim2.new(0, 280, 0, 200)}
+):Play()
 
--- Confirmação
-print("✅ Movement GUI para 'Roube um Brainrot' carregado!")
-print("📁 Localização: CoreGui")
-print("🎮 Use os botões para controlar Noclip e Speed")
+-- Print instructions
+print([[
+╔══════════════════════════════════════╗
+║     🛡️ GOD MODE SYSTEM LOADED      ║
+╠══════════════════════════════════════╣
+║ Comandos:                           ║
+║  /godmode    - Toggle God Mode     ║
+║  /godmode ui - Toggle UI           ║
+║                                     ║
+║ Atalhos:                            ║
+║  RightShift  - Toggle God Mode     ║
+║  LeftControl - Toggle UI           ║
+║                                     ║
+║ Arraste a janela para mover!        ║
+╚══════════════════════════════════════╝
+]])
+
+return GodModeUI
